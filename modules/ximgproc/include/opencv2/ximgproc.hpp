@@ -63,6 +63,7 @@
 #include "ximgproc/color_match.hpp"
 #include "ximgproc/radon_transform.hpp"
 #include "ximgproc/find_ellipses.hpp"
+#include "ximgproc/sparse_table_morphology.hpp"
 
 
 /**
@@ -116,6 +117,8 @@
 
     The size of the original image is required for compatibility with the imgproc functions when the boundary handling requires that pixel outside the image boundary are
     "on".
+
+    @defgroup ximgproc_sparse_table_morphology Morphology operation with sparse table approach.
 @}
 */
 
