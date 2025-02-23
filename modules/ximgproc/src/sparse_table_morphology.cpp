@@ -37,6 +37,8 @@
 #include <math.h>
 #include <vector>
 #include <iostream>
+#include<stack>
+#include<algorithm>
 
 namespace cv {
 namespace ximgproc {
@@ -53,6 +55,133 @@ static inline Point normalizeAnchor(Point anchor, Size ksize)
     return anchor;
 }
 
+static std::vector<Rect> GetCoveringRectangles(InputArray _kernel)
+{
+    std::vector<Rect> rects;
+    Mat kernel = _kernel.getMat();
+    int kCount = 0;
+
+    // 行ごとで四角を作るだけの実装
+    for (int row = 0; row < kernel.rows; row++)
+    {
+        uchar pre = 0;
+        for (int col = 0; col < kernel.cols; col++)
+        {
+            if (pre == 1 && kernel.ptr(row)[col] == 0)
+            {
+                rects[kCount].width = col - rects[kCount].x;
+                kCount++;
+            }
+            if (pre == 0 && kernel.ptr(row)[col] == 1)
+            {
+                rects.emplace_back(col, row, 0, 1);
+            }
+            pre = kernel.ptr(row)[col];
+        }
+        if (pre == 1)
+        {
+            rects[kCount].width = kernel.cols - rects[kCount].x;
+            kCount++;
+        }
+    }
+    return rects;
+}
+
+enum Dim
+{
+    Col, Row
+};
+
+struct StStep
+{
+    StStep(int dimR, int dimC, Dim _ax)
+    {
+        dimRow = dimR;
+        dimCol = dimC;
+        ax = _ax;
+    }
+    int dimRow;
+    int dimCol;
+    Dim ax;
+};
+
+std::vector<StStep> makePlan(std::vector<std::vector<bool>> sparseMatMap)
+{
+    std::vector<StStep> ans;
+    std::vector<std::vector<bool>> visitedMap(sparseMatMap.size(), std::vector<bool>(sparseMatMap[0].size(), false));
+    visitedMap[0][0] = true;
+    for (int row = 0; row < sparseMatMap.size(); row++)
+    {
+        for (int col = 0; col < sparseMatMap[row].size(); col++)
+        {
+            if (sparseMatMap[row][col])
+            {
+                for (int c = 0; c <= col; c++)
+                {
+                    if (!visitedMap[0][c])
+                    {
+                        visitedMap[0][c] = true;
+                        ans.emplace_back(0, c - 1, Dim::Col);
+                    }
+                }
+                for (int r = 0; r <= row; r++)
+                {
+                    if (!visitedMap[r][col])
+                    {
+                        visitedMap[r][col] = true;
+                        ans.emplace_back(r - 1, col, Dim::Row);
+                    }
+                }
+            }
+        }
+    }
+    return ans;
+}
+
+void MakeMinStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+{
+    CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
+
+    Mat src_ = src.getMat();
+    Mat dst_ = dst.getMat();
+    uchar* srcPtr1 = src_.ptr<uchar>(0, 0);
+    uchar* srcPtr2 = src_.ptr<uchar>(rowStep, colStep);
+    uchar* dstPtr = dst_.ptr<uchar>(0, 0);
+    for (int row = 0; row < src.rows() - rowStep; row++)
+    {
+        for (int col = 0; col < src.cols() - colStep; col++)
+        {
+            for (int c = 0; c < src.channels(); c++)
+            {
+                *dstPtr = min(*srcPtr1, *srcPtr2);
+                srcPtr1++;
+                srcPtr2++;
+                dstPtr++;
+            }
+        }
+        srcPtr1 += colStep * src.channels();
+        srcPtr2 += colStep * src.channels();
+        dstPtr += colStep * src.channels();
+    }
+}
+void MakeMaxStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+{
+    CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
+
+    Mat src_ = src.getMat();
+    Mat dst_ = dst.getMat();
+    uchar* srcPtr1 = src_.ptr<uchar>(0, 0);
+    uchar* srcPtr2 = src_.ptr<uchar>(rowStep, colStep);
+    uchar* dstPtr = dst_.ptr<uchar>(0, 0);
+    for (int row = 0; row < src.rows(); row++)
+    {
+        for (int col = 0; col < src.cols(); col++)
+        {
+            *dstPtr = max(*srcPtr1, *srcPtr2);
+        }
+    }
+}
+
 void dilate(InputArray src, OutputArray dst, InputArray kernel,
     Point anchor, int iterations,
     int borderType, const Scalar& borderValue)
@@ -66,7 +195,6 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     //---------------------------
     // checking input
     uchar ZERO = 255;
-    // op = ...?
 
     Mat src = _src.getMat();
     Mat dst = _dst.getMat();
@@ -94,157 +222,67 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
     cv::copyMakeBorder(src, expandedSrc, anchor.y, kernel.cols - 1 - anchor.y, anchor.x, kernel.rows - 1 - anchor.x, borderType, bV);
 
+    // generating a set of rectangles that covers whole kernel
+    std::vector<Rect> rects = GetCoveringRectangles(kernel);
+
     // log2 table construction
     int len = max(kernel.rows, kernel.cols) + 1;
-    int* lg = new int[len];
-    lg[1] = 0;
+    std::vector<int> lg(len);
     for (int i = 2; i < len; i++) lg[i] = lg[i >> 1] + 1;
 
-    // generating a set of rectangles that covers whole kernel
-    // todo: implement good algorithm
-    int kCount = 0;
-    int buffSize = kernel.rows * 2;
-    Rect* rects = new Rect[buffSize];
-    if (rects != NULL)
+    // 矩形を2冪矩形に分解 & 登場した2冪矩形の情報を位置と幅高さの指数で記録
+    std::vector<std::vector<bool>> sparseMatMap(lg[kernel.rows] + 1, std::vector<bool>(lg[kernel.cols] + 1, false));
+    std::vector<Rect> powerOf2Rects;
+    for (int i = 0; i < rects.size(); i++)
     {
-        // bad implementation; just separating by line.
-        for (int row = 0; row < kernel.rows; row++)
+        Rect rect = rects[i];
+        int lgCols = lg[rect.width];
+        int lgRows = lg[rect.height];
+        bool isColDivisionRequired = (1 << lgCols) < rect.width;
+        bool isRowDivisionRequired = (1 << lgRows) < rect.height;
+
+        sparseMatMap[lgRows][lgCols] = true;
+
+        powerOf2Rects.emplace_back(rect.x, rect.y, lgCols, lgRows);
+        if (isColDivisionRequired)
+            powerOf2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y, lgCols, lgRows);
+        if (isRowDivisionRequired)
+            powerOf2Rects.emplace_back(rect.x + rect.width, rect.y - (1 << lgRows), lgCols, lgRows);
+        if (isColDivisionRequired && isRowDivisionRequired)
+            powerOf2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y - (1 << lgRows), lgCols, lgRows);
+    }
+
+    // スパーステーブルの生成計画を立てる; planning how to calculate required mats in sparsetable
+    std::vector<StStep> stProcess = makePlan(sparseMatMap);
+
+    // スパーステーブルの生成
+    std::vector<std::vector<Mat*>> st = std::vector<std::vector<Mat*>>(lg[kernel.rows] + 1, std::vector<Mat*>(lg[kernel.cols] + 1));
+    st[0][0] = &expandedSrc;
+    for (int i = 0; i < stProcess.size(); i++)
+    {
+        StStep step = stProcess[i];
+        switch (step.ax)
         {
-            uchar pre = 0;
-            for (int col = 0; col < kernel.cols; col++)
-            {
-                if (kernel.ptr(row)[col] == 0)
-                {
-                    if (pre == 1)
-                    {
-                        rects[kCount].width = col - rects[kCount].x;
-                        kCount++;
-                    }
-                }
-                else
-                {
-                    if (pre == 0)
-                    {
-                        rects[kCount].y = row;
-                        rects[kCount].height = 1;
-                        rects[kCount].x = col;
-                    }
-                }
-                pre = kernel.ptr(row)[col];
-            }
-            if (pre == 1)
-            {
-                rects[kCount].width = kernel.cols - rects[kCount].x;
-                kCount++;
-            }
+        case Dim::Col:
+            st[step.dimRow][step.dimCol + 1] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
+            MakeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
+            break;
+        case Dim::Row:
+            st[step.dimRow + 1][step.dimCol] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
+            MakeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
+            break;
         }
     }
 
-    // calculate required mats in sparsetable
-    //   sparseTable[lnKcol][lnKrow] can be calculated from
-    //   sparseTable[lnKcol - 1][lnKrow] or sparseTable[lnKcol][lnKrow - 1].
-    //
-    // todo: implement better algorithm.
-    Mat stRequiredMatMap(lg[kernel.rows] + 1, lg[kernel.cols] + 1, CV_8UC1);
-    stRequiredMatMap.setTo(0);
-    for (int i = 0; i < kCount; i++)
+    // 結果構築
+    int aaa; //???
+    for (int i = 0; i < powerOf2Rects.size(); i++)
     {
-        stRequiredMatMap.ptr(lg[rects[i].height])[lg[rects[i].width]] = 1;
-    }
-#if 0
-    cv::resize(stRequiredMatMap, stRequiredMatMap, cv::Size(), 10, 10, 0);
-    imshow("debug", stRequiredMatMap);
-#endif
-
-    // temporary implementation; only row separation is supported.
-    int szColDepth = stRequiredMatMap.cols;
-    int szRowDepth = 1;
-
-    int stSizes[] = { szRowDepth, szColDepth, expandedSrc.rows, expandedSrc.cols };
-    Mat sparseTable(4, stSizes, src.type(), Scalar(0));
-
-    // sparse table construction
-    uchar* ptr = sparseTable.ptr();
-    uchar* refPtr = expandedSrc.ptr();
-
-    for (int row = 0; row < expandedSrc.rows; row++)
-    {
-        for (int col = 0; col < expandedSrc.cols; col++)
-        {
-            for (unsigned int c = 0; c < src.channels(); c++)
-            {
-                *ptr = *refPtr;
-                ptr++;
-                refPtr++;
-            }
-        }
-    }
-    for (int lgColCnt = 1; lgColCnt < szColDepth; lgColCnt++)
-    {
-        int b = (1 << lgColCnt) - 1;
-        int colROfs = sparseTable.step.p[3] * (1 << (lgColCnt - 1));
-        int colSkipOfs = b * sparseTable.step.p[3];
-
-        for (int row = 0; row < expandedSrc.rows; row++)
-        {
-            for (int col = 0; col < expandedSrc.cols - b; col++)
-            {
-                for (unsigned int c = 0; c < src.channels(); c++)
-                {
-                    uchar* l = ptr - sparseTable.step.p[1];
-                    uchar* r = l + colROfs;
-                    *ptr = min(*l, *r);
-                    ptr++;
-                }
-            }
-            ptr += colSkipOfs;
-        }
-    }
-    for (int lgRowCnt = 1; lgRowCnt < szRowDepth; lgRowCnt++)
-    {
-        int a = (1 << lgRowCnt) - 1;
-        int rowROfs = sparseTable.step.p[2] * (1 << (lgRowCnt - 1));
-        for (int lgColCnt = 0; lgColCnt < szColDepth; lgColCnt++)
-        {
-            int b = (1 << lgColCnt) - 1;
-            int colROfs = sparseTable.step.p[3] * (1 << (lgColCnt - 1));
-            int colSkipOfs = b * sparseTable.step.p[3];
-
-            for (int row = 0; row < expandedSrc.rows - a; row++)
-            {
-                for (int col = 0; col < expandedSrc.cols - b; col++)
-                {
-                    for (unsigned int c = 0; c < src.channels(); c++)
-                    {
-                        uchar* l = ptr - sparseTable.step.p[0];
-                        uchar* r = l + rowROfs;
-                        *ptr = min(*l, *r);
-                        ptr++;
-                    }
-                }
-                ptr += colSkipOfs;
-            }
-            ptr += a * sparseTable.step.p[2];
-        }
-    }
-
-    // result construction
-    for (int i = 0; i < kCount; i++)
-    {
-        int lgRectRows = lg[rects[i].height];
-        int lgRectCols = lg[rects[i].width];
-        int ofsTB = (rects[i].height - (1 << lgRectRows)) * sparseTable.step.p[2];
-        int ofsLR = (rects[i].width - (1 << lgRectCols)) * sparseTable.step.p[3];
-        int sideBorderSkipStep = (kernel.cols - 1) * sparseTable.step.p[3];
-        uchar* vLT = sparseTable.ptr()
-                    + sparseTable.step.p[0] * lgRectRows
-                    + sparseTable.step.p[1] * lgRectCols
-                    + rects[i].y * sparseTable.step.p[2]
-                    + rects[i].x * sparseTable.step.p[3];
-        uchar* vLB = vLT + ofsTB;
-        uchar* vRT = vLT + ofsLR;
-        uchar* vRB = vRT + ofsTB;
+        Rect rect = powerOf2Rects[i];
+        Mat* sparseMat = st[rect.height][rect.width];
+        uchar* srcPtr = sparseMat->ptr() + sparseMat->step.p[0] * rect.y + sparseMat->step.p[1] * rect.x;
         uchar* dstPtr = dst.ptr();
+        int sideBorderSkipStep = (kernel.cols - 1) * sparseMat->step.p[1];
 
         for (int row = 0; row < src.rows; row++)
         {
@@ -252,22 +290,14 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
             {
                 for (int c = 0; c < src.channels(); c++)
                 {
-                    *dstPtr = min(*dstPtr, min(min(*vLT, *vLB), min(*vRT, *vRB)));
-                    vLT++;
-                    vLB++;
-                    vRT++;
-                    vRB++;
+                    *dstPtr = min(*dstPtr, *srcPtr);
+                    srcPtr++;
                     dstPtr++;
                 }
             }
-            vLT += sideBorderSkipStep;
-            vLB += sideBorderSkipStep;
-            vRT += sideBorderSkipStep;
-            vRB += sideBorderSkipStep;
+            srcPtr += sideBorderSkipStep;
         }
     }
-    delete[] lg;
-    delete[] rects;
 }
 
 void morphologyEx(InputArray _src, OutputArray _dst, int op,
