@@ -144,24 +144,31 @@ void MakeMinStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 
     Mat src_ = src.getMat();
     Mat dst_ = dst.getMat();
+    int rowLim = src.rows() - rowStep;
+    int colChLim = (src.cols() - colStep) * src.channels();
+    int borderSkipStep = colStep * src.channels();
+
     uchar* srcPtr1 = src_.ptr<uchar>(0, 0);
     uchar* srcPtr2 = src_.ptr<uchar>(rowStep, colStep);
     uchar* dstPtr = dst_.ptr<uchar>(0, 0);
-    for (int row = 0; row < src.rows() - rowStep; row++)
+    for (int row = 0; row < rowLim; row++)
     {
-        for (int col = 0; col < src.cols() - colStep; col++)
+        for (int colCh = 0; colCh < colChLim; colCh++)
         {
-            for (int c = 0; c < src.channels(); c++)
+            if (*srcPtr1 < *srcPtr2)
             {
-                *dstPtr = min(*srcPtr1, *srcPtr2);
-                srcPtr1++;
+                *dstPtr++ = *srcPtr1++;
                 srcPtr2++;
-                dstPtr++;
+            }
+            else
+            {
+                *dstPtr++ = *srcPtr2++;
+                srcPtr1++;
             }
         }
-        srcPtr1 += colStep * src.channels();
-        srcPtr2 += colStep * src.channels();
-        dstPtr += colStep * src.channels();
+        srcPtr1 += borderSkipStep;
+        srcPtr2 += borderSkipStep;
+        dstPtr += borderSkipStep;
     }
 }
 void MakeMaxStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
@@ -275,25 +282,22 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     }
 
     // 結果構築
-    int aaa; //???
     for (int i = 0; i < powerOf2Rects.size(); i++)
     {
         Rect rect = powerOf2Rects[i];
-        Mat* sparseMat = st[rect.height][rect.width];
-        uchar* srcPtr = sparseMat->ptr() + sparseMat->step.p[0] * rect.y + sparseMat->step.p[1] * rect.x;
-        uchar* dstPtr = dst.ptr();
-        int sideBorderSkipStep = (kernel.cols - 1) * sparseMat->step.p[1];
+        Mat sparseMat = *st[rect.height][rect.width];
+        int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.step.p[1];
+        int colChLim = src.cols * src.channels();
 
+        uchar* srcPtr = sparseMat.ptr(rect.y, rect.x);
+        uchar* dstPtr = dst.ptr();
         for (int row = 0; row < src.rows; row++)
         {
-            for (int col = 0; col < src.cols; col++)
+            for (int col = 0; col < colChLim; col++)
             {
-                for (int c = 0; c < src.channels(); c++)
-                {
-                    *dstPtr = min(*dstPtr, *srcPtr);
-                    srcPtr++;
-                    dstPtr++;
-                }
+                if (*srcPtr < *dstPtr) *dstPtr = *srcPtr;
+                srcPtr++;
+                dstPtr++;
             }
             srcPtr += sideBorderSkipStep;
         }
