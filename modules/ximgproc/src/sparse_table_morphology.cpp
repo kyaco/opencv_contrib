@@ -55,7 +55,39 @@ static inline Point normalizeAnchor(Point anchor, Size ksize)
     return anchor;
 }
 
-static std::vector<Rect> GetCoveringRectangles(InputArray _kernel)
+enum Dim
+{
+    Col, Row
+};
+
+struct StStep
+{
+    StStep(int dimR, int dimC, Dim _ax)
+    {
+        dimRow = dimR;
+        dimCol = dimC;
+        ax = _ax;
+    }
+    int dimRow;
+    int dimCol;
+    Dim ax;
+};
+
+/*
+* Find a set of rectangles which coveres the kernel.
+*
+* The exact problem is defined and a not-optimal solution is proposed.
+* https://stackoverflow.com/questions/22769490/finding-the-smallest-set-of-rectangles-that-covers-the-given-rectilinear-simple
+*
+* Similer problem and a link to a paper.
+* https://stackoverflow.com/questions/31150398/maximal-rectangle-set-cover
+*
+* The paper. Names the problem "MISR".
+* https://home.ttic.edu/~cjulia/papers/rectangles-SODA.pdf ... x-approximation?
+* https://home.ttic.edu/~cjulia/papers/MISR.pdf ... (1-e)-approximation?
+*
+*/
+static std::vector<Rect> getCoveringRectangles(InputArray _kernel)
 {
     std::vector<Rect> rects;
     Mat kernel = _kernel.getMat();
@@ -87,26 +119,19 @@ static std::vector<Rect> GetCoveringRectangles(InputArray _kernel)
     return rects;
 }
 
-enum Dim
+/*
+*
+*
+* AtCoder: https://atcoder.jp/contests/ahc037/tasks/ahc037_a
+*
+* The rectilinear steiner arborescence problem
+* https://link.springer.com/article/10.1007/BF01758762
+*
+*/
+static std::vector<StStep> makePlan(std::vector<std::vector<bool>> sparseMatMap)
 {
-    Col, Row
-};
+    // todo: implement the reference paper 2-approximation algorithm
 
-struct StStep
-{
-    StStep(int dimR, int dimC, Dim _ax)
-    {
-        dimRow = dimR;
-        dimCol = dimC;
-        ax = _ax;
-    }
-    int dimRow;
-    int dimCol;
-    Dim ax;
-};
-
-std::vector<StStep> makePlan(std::vector<std::vector<bool>> sparseMatMap)
-{
     std::vector<StStep> ans;
     std::vector<std::vector<bool>> visitedMap(sparseMatMap.size(), std::vector<bool>(sparseMatMap[0].size(), false));
     visitedMap[0][0] = true;
@@ -138,7 +163,7 @@ std::vector<StStep> makePlan(std::vector<std::vector<bool>> sparseMatMap)
     return ans;
 }
 
-void MakeMinStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+static void makeMinStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
 
@@ -171,21 +196,37 @@ void MakeMinStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
         dstPtr += borderSkipStep;
     }
 }
-void MakeMaxStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+static void makeMaxStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
 
     Mat src_ = src.getMat();
     Mat dst_ = dst.getMat();
+    int rowLim = src.rows() - rowStep;
+    int colChLim = (src.cols() - colStep) * src.channels();
+    int borderSkipStep = colStep * src.channels();
+
     uchar* srcPtr1 = src_.ptr<uchar>(0, 0);
     uchar* srcPtr2 = src_.ptr<uchar>(rowStep, colStep);
     uchar* dstPtr = dst_.ptr<uchar>(0, 0);
-    for (int row = 0; row < src.rows(); row++)
+    for (int row = 0; row < rowLim; row++)
     {
-        for (int col = 0; col < src.cols(); col++)
+        for (int colCh = 0; colCh < colChLim; colCh++)
         {
-            *dstPtr = max(*srcPtr1, *srcPtr2);
+            if (*srcPtr1 > *srcPtr2)
+            {
+                *dstPtr++ = *srcPtr1++;
+                srcPtr2++;
+            }
+            else
+            {
+                *dstPtr++ = *srcPtr2++;
+                srcPtr1++;
+            }
         }
+        srcPtr1 += borderSkipStep;
+        srcPtr2 += borderSkipStep;
+        dstPtr += borderSkipStep;
     }
 }
 
@@ -230,7 +271,7 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     cv::copyMakeBorder(src, expandedSrc, anchor.y, kernel.cols - 1 - anchor.y, anchor.x, kernel.rows - 1 - anchor.x, borderType, bV);
 
     // generating a set of rectangles that covers whole kernel
-    std::vector<Rect> rects = GetCoveringRectangles(kernel);
+    std::vector<Rect> rects = getCoveringRectangles(kernel);
 
     // log2 table construction
     int len = max(kernel.rows, kernel.cols) + 1;
@@ -272,11 +313,11 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
         {
         case Dim::Col:
             st[step.dimRow][step.dimCol + 1] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
-            MakeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
+            makeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
             break;
         case Dim::Row:
             st[step.dimRow + 1][step.dimCol] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
-            MakeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
+            makeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
             break;
         }
     }
