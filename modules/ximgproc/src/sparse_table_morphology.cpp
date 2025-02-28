@@ -74,26 +74,37 @@ struct StStep
 };
 
 /*
-* Find a set of rectangles which coveres the kernel.
-*
-* The exact problem is defined and a not-optimal solution is proposed.
-* https://stackoverflow.com/questions/22769490/finding-the-smallest-set-of-rectangles-that-covers-the-given-rectilinear-simple
-*
-* Similer problem and a link to a paper.
-* https://stackoverflow.com/questions/31150398/maximal-rectangle-set-cover
-*
-* The paper. Names the problem "MISR".
-* https://home.ttic.edu/~cjulia/papers/rectangles-SODA.pdf ... x-approximation?
-* https://home.ttic.edu/~cjulia/papers/MISR.pdf ... (1-e)-approximation?
-*
+* Find a smaller set of power-of-2 rectangles to cover the kernel.
+* - The width and the height of each rectangles are power of 2.
+* - Overlappings of rectangles are allowed.
 */
-static std::vector<Rect> getCoveringRectangles(InputArray _kernel)
+static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 {
     std::vector<Rect> rects;
     Mat kernel = _kernel.getMat();
     int kCount = 0;
 
-    // 行ごとで四角を作るだけの実装
+    // log2 table construction
+    int len = max(kernel.rows, kernel.cols) + 1;
+    std::vector<int> log2(len);
+    for (int i = 2; i < len; i++) log2[i] = log2[i >> 1] + 1;
+
+    // Development note.
+    // the strategy atm is to separate the kernel with arbitaly rectangles and then place po2Rects on each corners.
+    //
+    // Find a set of rectangles which coveres the kernel.
+    //
+    // The exact problem is defined and a not-optimal solution is proposed.
+    // https://stackoverflow.com/questions/22769490/finding-the-smallest-set-of-rectangles-that-covers-the-given-rectilinear-simple
+    //
+    // Similer problem and a link to a paper.
+    // https://stackoverflow.com/questions/31150398/maximal-rectangle-set-cover
+    //
+    // The paper. Names the problem "MISR".
+    // https://home.ttic.edu/~cjulia/papers/rectangles-SODA.pdf ... x-approximation?
+    // https://home.ttic.edu/~cjulia/papers/MISR.pdf ... (1-e)-approximation?
+    //
+
     for (int row = 0; row < kernel.rows; row++)
     {
         uchar pre = 0;
@@ -116,7 +127,25 @@ static std::vector<Rect> getCoveringRectangles(InputArray _kernel)
             kCount++;
         }
     }
-    return rects;
+
+    std::vector<Rect> pow2Rects;
+    for (int i = 0; i < rects.size(); i++)
+    {
+        Rect rect = rects[i];
+        int lgCols = log2[rect.width];
+        int lgRows = log2[rect.height];
+        bool isColDivisionRequired = (1 << lgCols) < rect.width;
+        bool isRowDivisionRequired = (1 << lgRows) < rect.height;
+
+        pow2Rects.emplace_back(rect.x, rect.y, lgCols, lgRows);
+        if (isColDivisionRequired)
+            pow2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y, lgCols, lgRows);
+        if (isRowDivisionRequired)
+            pow2Rects.emplace_back(rect.x + rect.width, rect.y - (1 << lgRows), lgCols, lgRows);
+        if (isColDivisionRequired && isRowDivisionRequired)
+            pow2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y - (1 << lgRows), lgCols, lgRows);
+    }
+    return pow2Rects;
 }
 
 /*
@@ -270,41 +299,24 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
     cv::copyMakeBorder(src, expandedSrc, anchor.y, kernel.cols - 1 - anchor.y, anchor.x, kernel.rows - 1 - anchor.x, borderType, bV);
 
-    // generating a set of rectangles that covers whole kernel
-    std::vector<Rect> rects = getCoveringRectangles(kernel);
-
     // log2 table construction
     int len = max(kernel.rows, kernel.cols) + 1;
-    std::vector<int> lg(len);
-    for (int i = 2; i < len; i++) lg[i] = lg[i >> 1] + 1;
+    std::vector<int> log2(len);
+    for (int i = 2; i < len; i++) log2[i] = log2[i >> 1] + 1;
 
-    // 矩形を2冪矩形に分解 & 登場した2冪矩形の情報を位置と幅高さの指数で記録
-    std::vector<std::vector<bool>> sparseMatMap(lg[kernel.rows] + 1, std::vector<bool>(lg[kernel.cols] + 1, false));
-    std::vector<Rect> powerOf2Rects;
-    for (int i = 0; i < rects.size(); i++)
-    {
-        Rect rect = rects[i];
-        int lgCols = lg[rect.width];
-        int lgRows = lg[rect.height];
-        bool isColDivisionRequired = (1 << lgCols) < rect.width;
-        bool isRowDivisionRequired = (1 << lgRows) < rect.height;
+    // カーネルから幅と高さが2のべき乗の長方形リストを生成する
+    // - リストの width と height は log2 をとった値
+    std::vector<Rect> pow2Rects = genPow2RectsToCoverKernel(kernel);
 
-        sparseMatMap[lgRows][lgCols] = true;
+    // 幅と高さが2のべき乗の長方形リストを幅と高さごとに集計
+    std::vector<std::vector<bool>> sparseMatMap(log2[kernel.rows] + 1, std::vector<bool>(log2[kernel.cols] + 1, false));
+    for (int i = 0; i < pow2Rects.size(); i++) sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
 
-        powerOf2Rects.emplace_back(rect.x, rect.y, lgCols, lgRows);
-        if (isColDivisionRequired)
-            powerOf2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y, lgCols, lgRows);
-        if (isRowDivisionRequired)
-            powerOf2Rects.emplace_back(rect.x + rect.width, rect.y - (1 << lgRows), lgCols, lgRows);
-        if (isColDivisionRequired && isRowDivisionRequired)
-            powerOf2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y - (1 << lgRows), lgCols, lgRows);
-    }
-
-    // スパーステーブルの生成計画を立てる; planning how to calculate required mats in sparsetable
+    // スパーステーブルの生成計画を立てる; planning how to calculate required mats in sparse table
     std::vector<StStep> stProcess = makePlan(sparseMatMap);
 
-    // スパーステーブルの生成
-    std::vector<std::vector<Mat*>> st = std::vector<std::vector<Mat*>>(lg[kernel.rows] + 1, std::vector<Mat*>(lg[kernel.cols] + 1));
+    // スパーステーブルの生成; generate sparse table
+    std::vector<std::vector<Mat*>> st = std::vector<std::vector<Mat*>>(log2[kernel.rows] + 1, std::vector<Mat*>(log2[kernel.cols] + 1));
     st[0][0] = &expandedSrc;
     for (int i = 0; i < stProcess.size(); i++)
     {
@@ -322,10 +334,10 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
         }
     }
 
-    // 結果構築
-    for (int i = 0; i < powerOf2Rects.size(); i++)
+    // 結果構築; construct the result
+    for (int i = 0; i < pow2Rects.size(); i++)
     {
-        Rect rect = powerOf2Rects[i];
+        Rect rect = pow2Rects[i];
         Mat sparseMat = *st[rect.height][rect.width];
         int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.step.p[1];
         int colChLim = src.cols * src.channels();
