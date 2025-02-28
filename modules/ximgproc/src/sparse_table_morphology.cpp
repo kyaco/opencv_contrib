@@ -37,8 +37,8 @@
 #include <math.h>
 #include <vector>
 #include <iostream>
-#include<stack>
-#include<algorithm>
+#include <stack>
+#include <algorithm>
 
 namespace cv {
 namespace ximgproc {
@@ -78,74 +78,120 @@ struct StStep
 * - The width and the height of each rectangles are power of 2.
 * - Overlappings of rectangles are allowed.
 */
-static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
+std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 {
-    std::vector<Rect> rects;
-    Mat kernel = _kernel.getMat();
-    int kCount = 0;
+    CV_Assert(_kernel.type() == CV_8UC1);
 
-    // log2 table construction
+    Mat kernel = _kernel.getMat();
+
+    // generate log2 table
     int len = max(kernel.rows, kernel.cols) + 1;
     std::vector<int> log2(len);
     for (int i = 2; i < len; i++) log2[i] = log2[i >> 1] + 1;
 
-    // Development note.
-    // the strategy atm is to separate the kernel with arbitaly rectangles and then place po2Rects on each corners.
-    //
-    // Find a set of rectangles which coveres the kernel.
-    //
-    // The exact problem is defined and a not-optimal solution is proposed.
-    // https://stackoverflow.com/questions/22769490/finding-the-smallest-set-of-rectangles-that-covers-the-given-rectilinear-simple
-    //
-    // Similer problem and a link to a paper.
-    // https://stackoverflow.com/questions/31150398/maximal-rectangle-set-cover
-    //
-    // The paper. Names the problem "MISR".
-    // https://home.ttic.edu/~cjulia/papers/rectangles-SODA.pdf ... x-approximation?
-    // https://home.ttic.edu/~cjulia/papers/MISR.pdf ... (1-e)-approximation?
-    //
-
-    for (int row = 0; row < kernel.rows; row++)
+    // generate sparse table for the kernel
+    std::vector<std::vector<Mat>> st(log2[kernel.rows] + 1, std::vector<Mat>(log2[kernel.cols] + 1));
+    st[0][0] = kernel;
+    for (int colDepth = 1; colDepth <= log2[kernel.cols]; colDepth++)
     {
-        uchar pre = 0;
-        for (int col = 0; col < kernel.cols; col++)
+        int rowStep = 0;
+        int rowSkip = 0;
+        int rowLim = kernel.rows - rowSkip;
+
+        int colStep = 1 << (colDepth - 1);
+        int colSkip = (1 << colDepth) - 1;
+        int colLim = kernel.cols - colSkip;
+
+        st[0][colDepth] = Mat::zeros(kernel.rows, kernel.cols, kernel.type());
+        uchar* ptr1 = st[0][colDepth - 1].ptr();
+        uchar* ptr2 = st[0][colDepth - 1].ptr(rowStep, colStep);
+        uchar* dst = st[0][colDepth].ptr();
+        for (int row = 0; row < rowLim; row++)
         {
-            if (pre == 1 && kernel.ptr(row)[col] == 0)
+            for (int col = 0; col < colLim; col++)
             {
-                rects[kCount].width = col - rects[kCount].x;
-                kCount++;
+                *dst++ = *ptr1++ & *ptr2++;
             }
-            if (pre == 0 && kernel.ptr(row)[col] == 1)
-            {
-                rects.emplace_back(col, row, 0, 1);
-            }
-            pre = kernel.ptr(row)[col];
+            ptr1 += colSkip;
+            ptr2 += colSkip;
+            dst += colSkip;
         }
-        if (pre == 1)
+    }
+    for (int rowDepth = 1; rowDepth <= log2[kernel.rows]; rowDepth++)
+    {
+        int rowStep = 1 << (rowDepth - 1);
+        int rowSkip = (1 << rowDepth) - 1;
+        int rowLim = kernel.rows - rowSkip;
+        for (int colDepth = 0; colDepth <= log2[kernel.cols]; colDepth++)
         {
-            rects[kCount].width = kernel.cols - rects[kCount].x;
-            kCount++;
+            int colStep = 0;
+            int colSkip = (1 << colDepth) - 1;
+            int colLim = kernel.cols - colSkip;
+
+            st[rowDepth][colDepth] = Mat::zeros(kernel.rows, kernel.cols, kernel.type());
+            uchar* ptr1 = st[rowDepth - 1][colDepth].ptr();
+            uchar* ptr2 = st[rowDepth - 1][colDepth].ptr(rowStep, colStep);
+            uchar* dst = st[rowDepth][colDepth].ptr();
+            for (int row = 0; row < rowLim; row++)
+            {
+                for (int col = 0; col < colLim; col++)
+                {
+                    *dst++ = *ptr1++ & *ptr2++;
+                }
+                ptr1 += colSkip;
+                ptr2 += colSkip;
+                dst += colSkip;
+            }
         }
     }
 
-    std::vector<Rect> pow2Rects;
-    for (int i = 0; i < rects.size(); i++)
+    // find pow2 rectangles
+    std::vector<Rect> p2Rects;
+    for (int rowDepth = 0; rowDepth <= log2[kernel.rows]; rowDepth++)
     {
-        Rect rect = rects[i];
-        int lgCols = log2[rect.width];
-        int lgRows = log2[rect.height];
-        bool isColDivisionRequired = (1 << lgCols) < rect.width;
-        bool isRowDivisionRequired = (1 << lgRows) < rect.height;
+        int rowSkip = (1 << rowDepth) - 1;
+        int rowLim = kernel.rows - rowSkip;
+        for (int colDepth = 0; colDepth <= log2[kernel.cols]; colDepth++)
+        {
+            int colSkip = (1 << colDepth) - 1;
+            int colLim = kernel.cols - colSkip;
 
-        pow2Rects.emplace_back(rect.x, rect.y, lgCols, lgRows);
-        if (isColDivisionRequired)
-            pow2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y, lgCols, lgRows);
-        if (isRowDivisionRequired)
-            pow2Rects.emplace_back(rect.x + rect.width, rect.y - (1 << lgRows), lgCols, lgRows);
-        if (isColDivisionRequired && isRowDivisionRequired)
-            pow2Rects.emplace_back(rect.x + rect.width - (1 << lgCols), rect.y - (1 << lgRows), lgCols, lgRows);
+            uchar* ptr = st[rowDepth][colDepth].ptr();
+            for (int row = 0; row < rowLim; row++)
+            {
+                for (int col = 0; col < colLim; col++, ptr++)
+                {
+                    if (ptr[0] == 0) continue;
+
+                    if (0 < row && ptr[-1] == 1
+                        && row < rowLim - 1 && ptr[1] == 1
+                        && 0 < col && ptr[-1] == 1
+                        && col < colLim - 1 && ptr[1] == 1) continue;
+
+                    if (rowDepth < log2[kernel.rows] &&
+                        (st[rowDepth + 1][colDepth].ptr(row, col)[0] == 1 ||
+                            (row > (1 << rowDepth) - 1 &&
+                                st[rowDepth + 1][colDepth].ptr(row - (1 << (rowDepth)), col)[0] == 1
+                                )
+                            )
+                        ) continue;
+
+                    if (colDepth < log2[kernel.cols] &&
+                        (st[rowDepth][colDepth + 1].ptr(row, col)[0] == 1 ||
+                            (col > (1 << colDepth) - 1 &&
+                                st[rowDepth][colDepth + 1].ptr(row, col - (1 << (colDepth)))[0] == 1
+                                )
+                            )
+                        ) continue;
+
+                    p2Rects.emplace_back(col, row, colDepth, rowDepth);
+                }
+                ptr += colSkip;
+            }
+        }
     }
-    return pow2Rects;
+
+    return p2Rects;
 }
 
 /*
@@ -316,7 +362,7 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     std::vector<StStep> stProcess = makePlan(sparseMatMap);
 
     // スパーステーブルの生成; generate sparse table
-    std::vector<std::vector<Mat*>> st = std::vector<std::vector<Mat*>>(log2[kernel.rows] + 1, std::vector<Mat*>(log2[kernel.cols] + 1));
+    std::vector<std::vector<Mat*>> st(log2[kernel.rows] + 1, std::vector<Mat*>(log2[kernel.cols] + 1));
     st[0][0] = &expandedSrc;
     for (int i = 0; i < stProcess.size(); i++)
     {
