@@ -24,16 +24,13 @@ namespace stMorph {
  * structuring element is used. Kernel can be created using #getStructuringElement.
  * @param anchor position of the anchor within the element; default value (-1, -1) means that the
  * anchor is at the element center.
- * @param iterations number of times erosion is applied.
  * @param borderType pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
  * @param borderValue border value in case of a constant border
  *
  * @see cv::erode
  */
-CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
-                          Point anchor = Point(-1,-1), int iterations = 1,
-                          int borderType = BORDER_CONSTANT,
-                          const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel, Point anchor = Point(-1,-1),
+                          int borderType = BORDER_CONSTANT, const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
  * @brief Faster implementation of cv::dilate with sparse table concept.
@@ -45,16 +42,13 @@ CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
  * structuring element is used. Kernel can be created using #getStructuringElement
  * @param anchor position of the anchor within the element; default value (-1, -1) means that the
  * anchor is at the element center.
- * @param iterations number of times dilation is applied.
  * @param borderType pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not suported.
  * @param borderValue border value in case of a constant border
  *
  * @see cv::dilate
  */
-CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
-                          Point anchor = Point(-1,-1), int iterations = 1,
-                          int borderType = BORDER_CONSTANT,
-                          const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel, Point anchor = Point(-1, -1),
+                          int borderType = BORDER_CONSTANT, const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
  * @brief Faster implementation of cv::morphologyEx with sparse table concept.
@@ -76,11 +70,9 @@ CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
  *
  * @see cv::morphologyEx
  */
-CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
-                                int op, InputArray kernel,
-                                Point anchor = Point(-1,-1), int iterations = 1,
-                                int borderType = BORDER_CONSTANT,
-                                const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst, int op, InputArray kernel, Point anchor = Point(-1,-1),
+                                int iterations = 1,
+                                int borderType = BORDER_CONSTANT, const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 //! @}
 

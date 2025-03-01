@@ -272,14 +272,12 @@ static void makeMaxStMat(InputArray src, OutputArray dst, int rowStep, int colSt
     }
 }
 
-void dilate(InputArray src, OutputArray dst, InputArray kernel,
-    Point anchor, int iterations,
+void dilate(InputArray src, OutputArray dst, InputArray kernel, Point anchor,
     int borderType, const Scalar& borderValue)
 {
 }
 
-void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
-    Point anchor, int iterations,
+void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
     int borderType, const Scalar& borderValue)
 {
     //---------------------------
