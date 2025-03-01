@@ -1,12 +1,13 @@
 // This file is part of OpenCV project.
 // It is subject to the license terms in the LICENSE file found in the top-level directory
 // of this distribution and at http://opencv.org/license.html.
+
 #include "test_precomp.hpp"
 #include "opencv2/ximgproc/sparse_table_morphology.hpp"
 #include "opencv2/imgproc.hpp"
 
 namespace opencv_test {
-namespace st_morphology {
+namespace stMorph {
 
 TEST(ximgproc_SparseTableMorph, compare_with_original_erode)
 {
@@ -40,7 +41,7 @@ TEST(ximgproc_SparseTableMorph, compare_with_original_erode)
 
     // proposal
     timer.start();
-    ximgproc::st::erode(src, actual, kernel); // 217ms for Elipse, kSize = 101
+    ximgproc::stMorph::erode(src, actual, kernel); // 217ms for Elipse, kSize = 101
     timer.stop();
     double proposalTime = timer.getTimeMilli();
 

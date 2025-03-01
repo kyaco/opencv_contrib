@@ -9,13 +9,13 @@
 
 namespace cv {
 namespace ximgproc {
-namespace st {
+namespace stMorph {
 
-//! @addtogroup ximgproc_sparse_table_morphology
+//! @addtogroup imgproc_filter
 //! @{
 
 /**
- * @brief Another implementation of cv::erode with sparse table approach.
+ * @brief Faster implementation of cv::erode with sparse table concept.
  *
  * @param src input image; the number of channels can be arbitrary, but the depth should be one of
  * CV_8U, CV_16U, CV_16S, CV_32F or CV_64F.
@@ -36,7 +36,7 @@ CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
                           const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
- * @brief Another implementation of cv::dilate with sparse table approach.
+ * @brief Faster implementation of cv::dilate with sparse table concept.
  *
  * @param src input image; the number of channels can be arbitrary, but the depth should be one of
  * CV_8U, CV_16U, CV_16S, CV_32F or CV_64F.
@@ -57,7 +57,7 @@ CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
                           const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
- * @brief Another implementation of cv::morphologyEx with sparse table approach.
+ * @brief Faster implementation of cv::morphologyEx with sparse table concept.
 
  * @param src Source image. The number of channels can be arbitrary. The depth should be one of
  * CV_8U, CV_16U, CV_16S, CV_32F or CV_64F.
