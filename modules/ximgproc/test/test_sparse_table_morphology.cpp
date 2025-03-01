@@ -68,7 +68,8 @@ TEST(ximgproc_SparseTableMorph, compare_with_original_erode)
     CV_Assert(max == 0);
 }
 
-
+// this method may be applied for the covering polygon problem with rectangle.
+// https://www.sciencedirect.com/science/article/pii/S0019995884800121
 std::tuple<std::vector<std::vector<Mat>>, std::vector<Rect>> genPow2RectsToCoverKernel_dev(InputArray _kernel)
 {
     CV_Assert(_kernel.type() == CV_8UC1);
@@ -152,28 +153,18 @@ std::tuple<std::vector<std::vector<Mat>>, std::vector<Rect>> genPow2RectsToCover
             {
                 for (int col = 0; col < colLim; col++, ptr++)
                 {
+                    // ignore black cell
                     if (ptr[0] == 0) continue;
 
-                    if (0 < row && ptr[-1] == 1
-                        && row < rowLim - 1 && ptr[1] == 1
-                        && 0 < col && ptr[-1] == 1
-                        && col < colLim - 1 && ptr[1] == 1) continue;
+                    // ignore if both sides are white by each axis
+                    if (col > 0 && ptr[-1] == 1 && col < colLim && ptr[1] == 1) continue;
+                    if (row > 0 && ptr[-kernel.cols] && row < rowLim && ptr[kernel.cols] == 1) continue;
 
-                    if (rowDepth < log2[kernel.rows] &&
-                        (st[rowDepth + 1][colDepth].ptr(row, col)[0] == 1 ||
-                            (row > (1 << rowDepth) - 1 &&
-                                st[rowDepth + 1][colDepth].ptr(row - (1 << (rowDepth)), col)[0] == 1
-                                )
-                            )
-                        ) continue;
-
-                    if (colDepth < log2[kernel.cols] &&
-                        (st[rowDepth][colDepth + 1].ptr(row, col)[0] == 1 ||
-                            (col > (1 << colDepth) - 1 &&
-                                st[rowDepth][colDepth + 1].ptr(row, col - (1 << (colDepth)))[0] == 1
-                                )
-                            )
-                        ) continue;
+                    // ignore one of neighbor block is white; will be alive in deeper table
+                    if (col + (1 << colDepth) <= colLim && ptr[1 << colDepth] == 1) continue;
+                    if (col - (1 << colDepth) >= 0 && ptr[-(1 << colDepth)] == 1) continue;
+                    if (row + (1 << rowDepth) <= rowLim && ptr[(1 << rowDepth) * kernel.cols] == 1) continue;
+                    if (row - (1 << rowDepth) >= 0 && ptr[-(1 << rowDepth) * kernel.cols] == 1) continue;
 
                     p2Rects.emplace_back(col, row, colDepth, rowDepth);
                 }
@@ -188,19 +179,45 @@ TEST(develop, POW2RECT_COVERING)
 {
     int kSize = 11;
     Size kernelSize(kSize, kSize);
-    Mat kernel = getStructuringElement(MorphShapes::MORPH_ELLIPSE, kernelSize);
+    //Mat kernel = getStructuringElement(MorphShapes::MORPH_ELLIPSE, kernelSize);
+    uchar ary[] {
+        0, 1, 0, 1, 0, 1, 0, 1,
+        1, 1, 0, 1, 1, 1, 1, 1,
+        1, 0, 0, 1, 0, 1, 0, 1,
+        0, 0, 1, 1, 1, 1, 1, 1,
+        0, 1, 0, 1, 0, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+        0, 1, 0, 1, 0, 1, 0, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+    };
+    Mat kernel(8, 8, CV_8UC1, ary);
 
     std::tuple<std::vector<std::vector<Mat>>, std::vector<Rect>> ret = genPow2RectsToCoverKernel_dev(kernel);
-    std::vector<std::vector<Mat>> st = std::get<0>(ret);
-    std::vector<Rect> rects = std::get<1>(ret);
 
-    // visualize
+    // visualize sparse table
+    std::vector<std::vector<Mat>> st = std::get<0>(ret);
+    int cellSize = 10;
     Mat concatSt;
     std::vector<Mat> hconMat(st.size(), Mat());
+    for (int row = 0; row < st.size(); row++) for (int col = 0; col < st[row].size(); col++)
+    {
+        Mat t = st[row][col];
+        Mat x = Mat::zeros(t.rows * cellSize, t.cols * cellSize, CV_8UC3);
+        uchar* pCell = t.ptr();
+        for (int r = 0; r < t.rows; r++) for (int c = 0; c < t.cols; c++, pCell++)
+        {
+            if (*pCell == 1) cv::rectangle(x, Rect(c * cellSize, r * cellSize, cellSize, cellSize), Scalar(255, 255, 255), -1);
+        }
+        for (int r = 1; r < t.rows; r++) cv::line(x, Point(0, r * cellSize), Point(x.cols, r * cellSize), Scalar(50, 50, 50), 1);
+        for (int c = 1; c < t.cols; c++) cv::line(x, Point(c * cellSize, 0), Point(c * cellSize, x.rows), Scalar(50, 50, 50), 1);
+        cv::copyMakeBorder(x, x, 0, 2, 0, 2, BorderTypes::BORDER_CONSTANT, Scalar(200, 200, 200));
+        st[row][col] = x;
+    }
     for (int row = 0; row < st.size(); row++) hconcat(st[row], hconMat[row]); vconcat(hconMat, concatSt);
-    resize(concatSt *255, concatSt, Size(), 10, 10, InterpolationFlags::INTER_NEAREST);
     imshow("result", concatSt);
 
+    // visualize rectangles on kernel
+    std::vector<Rect> rects = std::get<1>(ret);
     int rate = 40;
     resize(kernel * 255, kernel, Size(), rate, rate, InterpolationFlags::INTER_NEAREST);
     cvtColor(kernel, kernel, cv::COLOR_GRAY2BGR);

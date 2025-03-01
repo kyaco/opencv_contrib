@@ -161,28 +161,18 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
             {
                 for (int col = 0; col < colLim; col++, ptr++)
                 {
+                    // ignore black cell
                     if (ptr[0] == 0) continue;
 
-                    if (0 < row && ptr[-1] == 1
-                        && row < rowLim - 1 && ptr[1] == 1
-                        && 0 < col && ptr[-1] == 1
-                        && col < colLim - 1 && ptr[1] == 1) continue;
+                    // ignore if both sides are white by each axis
+                    if (col > 0 && ptr[-1] == 1 && col < colLim && ptr[1] == 1) continue;
+                    if (row > 0 && ptr[-kernel.cols] && row < rowLim && ptr[kernel.cols] == 1) continue;
 
-                    if (rowDepth < log2[kernel.rows] &&
-                        (st[rowDepth + 1][colDepth].ptr(row, col)[0] == 1 ||
-                            (row > (1 << rowDepth) - 1 &&
-                                st[rowDepth + 1][colDepth].ptr(row - (1 << (rowDepth)), col)[0] == 1
-                                )
-                            )
-                        ) continue;
-
-                    if (colDepth < log2[kernel.cols] &&
-                        (st[rowDepth][colDepth + 1].ptr(row, col)[0] == 1 ||
-                            (col > (1 << colDepth) - 1 &&
-                                st[rowDepth][colDepth + 1].ptr(row, col - (1 << (colDepth)))[0] == 1
-                                )
-                            )
-                        ) continue;
+                    // ignore one of neighbor block is white; will be alive in deeper table
+                    if (col + (1 << colDepth) <= colLim && ptr[1 << colDepth] == 1) continue;
+                    if (col - (1 << colDepth) >= 0 && ptr[-(1 << colDepth)] == 1) continue;
+                    if (row + (1 << rowDepth) <= rowLim && ptr[(1 << rowDepth) * kernel.cols] == 1) continue;
+                    if (row - (1 << rowDepth) >= 0 && ptr[-(1 << rowDepth) * kernel.cols] == 1) continue;
 
                     p2Rects.emplace_back(col, row, colDepth, rowDepth);
                 }
