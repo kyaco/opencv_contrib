@@ -39,6 +39,7 @@
 #include <iostream>
 #include <stack>
 #include <algorithm>
+#include <queue>
 
 namespace cv {
 namespace ximgproc {
@@ -195,36 +196,43 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 */
 static std::vector<StStep> makePlan(std::vector<std::vector<bool>> sparseMatMap)
 {
-    // todo: implement the reference paper 2-approximation algorithm
-
-    std::vector<StStep> ans;
-    std::vector<std::vector<bool>> visitedMap(sparseMatMap.size(), std::vector<bool>(sparseMatMap[0].size(), false));
-    visitedMap[0][0] = true;
-    for (int row = 0; row < sparseMatMap.size(); row++)
+    auto comparePos = [](Point lp, Point rp) {
+        int diffx = lp.x - rp.x;
+        int diffy = lp.y - rp.y;
+        int diff = diffx + diffy;
+        if (diff != 0) return diff < 0;
+        if (diffx != 0) return diffx < 0;
+        return diffy < 0;
+        };
+    std::priority_queue<Point, std::vector<Point>, decltype(comparePos)> points{ comparePos };
+    for (int r = 0; r < sparseMatMap.size(); r++)
     {
-        for (int col = 0; col < sparseMatMap[row].size(); col++)
+        for (int c = 0; c < sparseMatMap[r].size(); c++)
         {
-            if (sparseMatMap[row][col])
-            {
-                for (int c = 0; c <= col; c++)
-                {
-                    if (!visitedMap[0][c])
-                    {
-                        visitedMap[0][c] = true;
-                        ans.emplace_back(0, c - 1, Dim::Col);
-                    }
-                }
-                for (int r = 0; r <= row; r++)
-                {
-                    if (!visitedMap[r][col])
-                    {
-                        visitedMap[r][col] = true;
-                        ans.emplace_back(r - 1, col, Dim::Row);
-                    }
-                }
-            }
+            if (sparseMatMap[r][c]) points.push(Point(c, r));
         }
     }
+
+    std::vector<StStep> ans;
+    while (points.size() >= 2)
+    {
+        Point p1 = points.top();
+        points.pop();
+        Point p2 = points.top();
+        points.pop();
+        int newX = min(p1.x, p2.x);
+        int newY = min(p1.y, p2.y);
+        points.push(Point(newX, newY));
+
+        for (int col = p1.x - 1; col >= newX; col--) ans.emplace_back(p1.y, col, Dim::Col);
+        for (int row = p1.y - 1; row >= newY; row--) ans.emplace_back(row, p1.x, Dim::Row);
+        for (int col = p2.x - 1; col >= newX; col--) ans.emplace_back(p2.y, col, Dim::Col);
+        for (int row = p2.y - 1; row >= newY; row--) ans.emplace_back(row, p2.x, Dim::Row);
+    }
+    Point p1 = points.top();
+    for (int col = p1.x - 1; col >= 0; col--) ans.emplace_back(p1.y, col, Dim::Col);
+    for (int row = p1.y - 1; row >= 0; row--) ans.emplace_back(row, 0, Dim::Row);
+    std::reverse(ans.begin(), ans.end());
     return ans;
 }
 

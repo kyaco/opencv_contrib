@@ -25,8 +25,8 @@ TEST(ximgproc_SparseTableMorph, compare_with_original_erode)
     Mat kernel = getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, kernelSize, Point(kRadius, kRadius));
 
     src.setTo(240);
-    putText(src, "A", Point(sz.height / 5 * 1, sz.height / 20 * 15), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(250, 40, 40), 30, LineTypes::FILLED);
-    putText(src, "B", Point(sz.height / 5 * 2, sz.height / 20 * 16), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(20, 230, 0), 30, LineTypes::FILLED);
+    putText(src, "A", Point(sz.height / 5 * 1, sz.height / 20 * 15), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(255, 40, 40), 30, LineTypes::FILLED);
+    putText(src, "B", Point(sz.height / 5 * 2, sz.height / 20 * 16), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(20, 255, 0), 30, LineTypes::FILLED);
     putText(src, "C", Point(sz.height / 5 * 3, sz.height / 20 * 17), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(10, 10, 255), 30, LineTypes::FILLED);
 
     cv::TickMeter timer;
@@ -196,7 +196,7 @@ TEST(develop, POW2RECT_COVERING)
 
     // visualize sparse table
     std::vector<std::vector<Mat>> st = std::get<0>(ret);
-    int cellSize = 10;
+    int cellSize = 16;
     Mat concatSt;
     std::vector<Mat> hconMat(st.size(), Mat());
     for (int row = 0; row < st.size(); row++) for (int col = 0; col < st[row].size(); col++)
@@ -230,14 +230,14 @@ TEST(develop, POW2RECT_COVERING)
     for (int i = 0; i < rects.size(); i++)
     {
         Rect rect = rects[i];
-        Point lt((rect.x                    ) * rate      + i, (rect.y                     ) * rate      + i);
-        Point lb((rect.x                    ) * rate      + i, (rect.y + (1 << rect.height)) * rate - 15 + i);
-        Point rb((rect.x + (1 << rect.width)) * rate - 15 + i, (rect.y + (1 << rect.height)) * rate - 15 + i);
-        Point rt((rect.x + (1 << rect.width)) * rate - 15 + i, (rect.y                     ) * rate      + i);
-        cv::line(kernel, lt, lb, color[i], 2);
-        cv::line(kernel, lb, rb, color[i], 2);
-        cv::line(kernel, rb, rt, color[i], 2);
-        cv::line(kernel, rt, lt, color[i], 2);
+        Point lt((rect.x                    ) * rate      + i % 11, (rect.y                     ) * rate      + i % 11);
+        Point lb((rect.x                    ) * rate      + i % 11, (rect.y + (1 << rect.height)) * rate - 11 + i % 11);
+        Point rb((rect.x + (1 << rect.width)) * rate - 11 + i % 11, (rect.y + (1 << rect.height)) * rate - 11 + i % 11);
+        Point rt((rect.x + (1 << rect.width)) * rate - 11 + i % 11, (rect.y                     ) * rate      + i % 11);
+        cv::line(kernel, lt, lb, color[i % 20], 2);
+        cv::line(kernel, lb, rb, color[i % 20], 2);
+        cv::line(kernel, rb, rt, color[i % 20], 2);
+        cv::line(kernel, rt, lt, color[i % 20], 2);
     }
     imshow("kernel", kernel);
 
