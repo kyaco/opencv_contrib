@@ -48,7 +48,7 @@ struct StStep
 * - The width and the height of each rectangles are power of 2.
 * - Overlappings of rectangles are allowed.
 */
-std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
+static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 {
     CV_Assert(_kernel.type() == CV_8UC1);
 
@@ -163,7 +163,7 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 * https://link.springer.com/article/10.1007/BF01758762
 *
 */
-static std::vector<StStep> makePlan(std::vector<std::vector<bool>> sparseMatMap)
+static std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> sparseMatMap)
 {
     auto comparePos = [](Point lp, Point rp) {
         int diffx = lp.x - rp.x;
@@ -205,7 +205,7 @@ static std::vector<StStep> makePlan(std::vector<std::vector<bool>> sparseMatMap)
     return ans;
 }
 
-static void makeMinStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+static void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
 
@@ -238,7 +238,7 @@ static void makeMinStMat(InputArray src, OutputArray dst, int rowStep, int colSt
         dstPtr += borderSkipStep;
     }
 }
-static void makeMaxStMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+static void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
 
@@ -324,7 +324,7 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
     for (int i = 0; i < pow2Rects.size(); i++) sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
 
     // スパーステーブルの生成計画を立てる; planning how to calculate required mats in sparse table
-    std::vector<StStep> stProcess = makePlan(sparseMatMap);
+    std::vector<StStep> stProcess = planSparseTableConstruction(sparseMatMap);
 
     // スパーステーブルの生成; generate sparse table
     std::vector<std::vector<Mat*>> st(log2[kernel.rows] + 1, std::vector<Mat*>(log2[kernel.cols] + 1));
@@ -336,11 +336,11 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
         {
         case Dim::Col:
             st[step.dimRow][step.dimCol + 1] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
-            makeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
+            makeMinSparseTableMat(*st[step.dimRow][step.dimCol], *st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
             break;
         case Dim::Row:
             st[step.dimRow + 1][step.dimCol] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
-            makeMinStMat(*st[step.dimRow][step.dimCol], *st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
+            makeMinSparseTableMat(*st[step.dimRow][step.dimCol], *st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
             break;
         }
     }
