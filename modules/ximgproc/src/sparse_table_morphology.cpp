@@ -8,7 +8,6 @@
 #include <iostream>
 #include <stack>
 #include <algorithm>
-#include <queue>
 
 namespace cv {
 namespace ximgproc {
@@ -134,40 +133,46 @@ std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> s
 * https://link.springer.com/article/10.1007/BF01758762
 *
 */
-    auto comparePos = [](Point lp, Point rp) {
-        int diffx = lp.x - rp.x;
-        int diffy = lp.y - rp.y;
-        int diff = diffx + diffy;
-        if (diff != 0) return diff < 0;
-        if (diffx != 0) return diffx < 0;
-        return diffy < 0;
-        };
-    std::priority_queue<Point, std::vector<Point>, decltype(comparePos)> points{ comparePos };
+    std::vector<Point> pos;
     sparseMatMap[0][0] = true;
     for (int r = 0; r < sparseMatMap.size(); r++)
         for (int c = 0; c < sparseMatMap[r].size(); c++)
-            if (sparseMatMap[r][c]) points.push(Point(c, r));
-
+            if (sparseMatMap[r][c]) pos.emplace_back(c, r);
     std::vector<StStep> plan;
-    while (points.size() >= 2)
+    while(pos.size() > 1)
     {
-        Point p1 = points.top();
-        points.pop();
-        Point p2 = points.top();
-        points.pop();
-        int newX = min(p1.x, p2.x);
-        int newY = min(p1.y, p2.y);
-        if (!sparseMatMap[newY][newX])
+        int maxCost = -1;
+        int maxI = 0;
+        int maxJ = 0;
+        int maxX = 0;
+        int maxY = 0;
+        for (int i = 0; i < pos.size(); i++)
         {
-            sparseMatMap[newY][newX] = true;
-            points.push(Point(newX, newY));
+            for (int j = i + 1; j < pos.size(); j++)
+            {
+                int _x = min(pos[i].x, pos[j].x);
+                int _y = min(pos[i].y, pos[j].y);
+                int cost = _x + _y;
+                if (maxCost < cost)
+                {
+                    maxCost = cost;
+                    maxI = i;
+                    maxJ = j;
+                    maxX = _x;
+                    maxY = _y;
+                }
+            }
         }
+        for (int col = pos[maxI].x - 1; col >= maxX; col--) plan.emplace_back(pos[maxI].y, col, Dim::Col);
+        for (int row = pos[maxI].y - 1; row >= maxY; row--) plan.emplace_back(row, maxX, Dim::Row);
+        for (int col = pos[maxJ].x - 1; col >= maxX; col--) plan.emplace_back(pos[maxJ].y, col, Dim::Col);
+        for (int row = pos[maxJ].y - 1; row >= maxY; row--) plan.emplace_back(row, maxX, Dim::Row);
 
-        for (int col = p1.x - 1; col >= newX; col--) plan.emplace_back(p1.y, col, Dim::Col);
-        for (int row = p1.y - 1; row >= newY; row--) plan.emplace_back(row, p1.x, Dim::Row);
-        for (int col = p2.x - 1; col >= newX; col--) plan.emplace_back(p2.y, col, Dim::Col);
-        for (int row = p2.y - 1; row >= newY; row--) plan.emplace_back(row, p2.x, Dim::Row);
+        pos[maxI] = Point(maxX, maxY);
+        std::swap(pos[maxJ], pos[pos.size() - 1]);
+        pos.pop_back();
     }
+
     std::reverse(plan.begin(), plan.end());
     return plan;
 }

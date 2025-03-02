@@ -12,7 +12,7 @@ namespace stMorph {
 TEST(ximgproc_SparseTableMorph, compare_with_original_erode)
 {
     // preparation
-    int kRadius = 10;
+    int kRadius = 15;
     //Size sz(200, 150);
      Size sz = szVGA;
     int type = CV_8UC3;
@@ -23,7 +23,7 @@ TEST(ximgproc_SparseTableMorph, compare_with_original_erode)
     Mat expected(sz, type);
     Mat actual(sz, type);
     Size kernelSize(kSize, kSize);
-    Mat kernel = getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, kernelSize, Point(kRadius, kRadius));
+    Mat kernel = getStructuringElement(cv::MorphShapes::MORPH_RECT, kernelSize, Point(kRadius, kRadius));
 
     src.setTo(240);
     putText(src, "A", Point(sz.height / 5 * 1, sz.height / 20 * 15), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(255, 40, 40), 30, LineTypes::FILLED);
@@ -71,9 +71,6 @@ TEST(ximgproc_SparseTableMorph, compare_with_original_erode)
 
 TEST(develop, POW2RECT_COVERING)
 {
-    int kSize = 11;
-    Size kernelSize(kSize, kSize);
-    //Mat kernel = getStructuringElement(MorphShapes::MORPH_ELLIPSE, kernelSize);
     uchar ary[] {
         0, 1, 0, 1, 0, 1, 0, 1,
         1, 1, 0, 1, 1, 1, 1, 1,
@@ -87,7 +84,7 @@ TEST(develop, POW2RECT_COVERING)
     Mat kernel(8, 8, CV_8UC1, ary);
     std::vector<Rect> rects = ximgproc::stMorph::genPow2RectsToCoverKernel(kernel);
 
-    int rate = 40;
+    int rate = 20;
     resize(kernel * 255, kernel, Size(), rate, rate, InterpolationFlags::INTER_NEAREST);
     cvtColor(kernel, kernel, cv::COLOR_GRAY2BGR);
     Scalar color[20]{
@@ -121,9 +118,9 @@ TEST(develop, PLANNING)
         std::vector<bool>{0,0,0,0,0,0,1,0},
         std::vector<bool>{0,0,0,0,0,1,0,0},
         std::vector<bool>{0,0,0,0,1,0,0,0},
-        std::vector<bool>{0,0,0,0,0,1,0,0},
+        std::vector<bool>{0,0,0,1,0,0,0,0},
         std::vector<bool>{0,0,1,0,0,0,0,0},
-        std::vector<bool>{0,1,0,0,1,0,0,0},
+        std::vector<bool>{0,1,0,0,0,0,0,0},
         std::vector<bool>{1,0,0,0,0,0,0,0},
     };
     auto res = ximgproc::stMorph::planSparseTableConstruction(map);
