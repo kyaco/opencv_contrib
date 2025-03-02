@@ -226,6 +226,7 @@ static void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, 
     {
         for (int colCh = 0; colCh < colChLim; colCh++)
         {
+            // Somehow min(a,b) or a<b?a:b are slower.
             if (*srcPtr1 < *srcPtr2)
             {
                 *dstPtr++ = *srcPtr1++;
@@ -284,19 +285,12 @@ void dilate(InputArray src, OutputArray dst, InputArray kernel, Point anchor,
 void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
     int borderType, const Scalar& borderValue)
 {
-    //---------------------------
-    // checking input
     uchar ZERO = 255;
 
     Mat src = _src.getMat();
-    Mat dst = _dst.getMat();
     Mat kernel = _kernel.getMat();
     anchor = stMorph::normalizeAnchor(anchor, kernel.size());
 
-    // iterations; is it needed yet?
-    // borderType; BORDER_CONSTANT
-
-    dst.setTo(ZERO);
     Scalar bV = borderValue;
     if (borderType == cv::BorderTypes::BORDER_CONSTANT && borderValue == cv::morphologyDefaultBorderValue())
     {
@@ -305,37 +299,37 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
         // need to think CV_8U/CV_16U/CV_16S/CV_32F/CV64F
     }
 
-    //---------------------------
-    // pre processing
+    // Generate list of rectangles whose width and height are power of 2.
+    // (The width and height values of returned rects ​​are the log2 of the actual values.)
+    std::vector<Rect> pow2Rects = genPow2RectsToCoverKernel(kernel);
+
+    // get the depth limits
+    int rowDepthLim = 0, colDepthLim = 0;
+    for (int i = 0; i < pow2Rects.size(); i++)
+    {
+        if (rowDepthLim < pow2Rects[i].height) rowDepthLim = pow2Rects[i].height;
+        if (colDepthLim < pow2Rects[i].width) colDepthLim = pow2Rects[i].width;
+    }
+    rowDepthLim++;
+    colDepthLim++;
+
+    // list up required sparse table nodes.
+    std::vector<std::vector<bool>> sparseMatMap(rowDepthLim, std::vector<bool>(colDepthLim, false));
+    for (int i = 0; i < pow2Rects.size(); i++) sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
+
+    // plan how to calculate required nodes of 2D sparse table.
+    std::vector<StStep> stPlan = planSparseTableConstruction(sparseMatMap);
 
     // adding border to the source.
-    // borderType := cv::BorderTypes::BORDER_CONSTANT(0)
-    // borderValue := DBL_MAX => { MAX_VALUE (when erasion); MIN_VALUE (when dilation) }
     Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
     cv::copyMakeBorder(src, expandedSrc, anchor.y, kernel.cols - 1 - anchor.y, anchor.x, kernel.rows - 1 - anchor.x, borderType, bV);
 
-    // log2 table construction
-    int len = max(kernel.rows, kernel.cols) + 1;
-    std::vector<int> log2(len);
-    for (int i = 2; i < len; i++) log2[i] = log2[i >> 1] + 1;
-
-    // カーネルから幅と高さが2のべき乗の長方形リストを生成する
-    // - リストの width と height は log2 をとった値
-    std::vector<Rect> pow2Rects = genPow2RectsToCoverKernel(kernel);
-
-    // 幅と高さが2のべき乗の長方形リストを幅と高さごとに集計
-    std::vector<std::vector<bool>> sparseMatMap(log2[kernel.rows] + 1, std::vector<bool>(log2[kernel.cols] + 1, false));
-    for (int i = 0; i < pow2Rects.size(); i++) sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
-
-    // スパーステーブルの生成計画を立てる; planning how to calculate required mats in sparse table
-    std::vector<StStep> stProcess = planSparseTableConstruction(sparseMatMap);
-
-    // スパーステーブルの生成; generate sparse table
-    std::vector<std::vector<Mat*>> st(log2[kernel.rows] + 1, std::vector<Mat*>(log2[kernel.cols] + 1));
+    // calculate sparse table nodes
+    std::vector<std::vector<Mat*>> st(rowDepthLim, std::vector<Mat*>(colDepthLim));
     st[0][0] = &expandedSrc;
-    for (int i = 0; i < stProcess.size(); i++)
+    for (int i = 0; i < stPlan.size(); i++)
     {
-        StStep step = stProcess[i];
+        StStep step = stPlan[i];
         switch (step.ax)
         {
         case Dim::Col:
@@ -349,14 +343,15 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
         }
     }
 
-    // 結果構築; construct the result
+    // result constructioin
+    Mat dst = _dst.getMat();
+    dst.setTo(ZERO);
+    int colChLim = src.cols * src.channels();
     for (int i = 0; i < pow2Rects.size(); i++)
     {
         Rect rect = pow2Rects[i];
         Mat sparseMat = *st[rect.height][rect.width];
         int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.step.p[1];
-        int colChLim = src.cols * src.channels();
-
         uchar* srcPtr = sparseMat.ptr(rect.y, rect.x);
         uchar* dstPtr = dst.ptr();
         for (int row = 0; row < src.rows; row++)
