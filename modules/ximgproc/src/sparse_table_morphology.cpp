@@ -191,7 +191,11 @@ static std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<b
         points.pop();
         int newX = min(p1.x, p2.x);
         int newY = min(p1.y, p2.y);
-        points.push(Point(newX, newY));
+        if (!sparseMatMap[newY][newX])
+        {
+            sparseMatMap[newY][newX] = true;
+            points.push(Point(newX, newY));
+        }
 
         for (int col = p1.x - 1; col >= newX; col--) ans.emplace_back(p1.y, col, Dim::Col);
         for (int row = p1.y - 1; row >= newY; row--) ans.emplace_back(row, p1.x, Dim::Row);
