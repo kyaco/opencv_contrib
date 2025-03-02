@@ -6,6 +6,7 @@
 #define __OPENCV_SPARSE_TABLE_MORPHOLOGY_HPP__
 
 #include <opencv2/core.hpp>
+#include <vector>
 
 namespace cv {
 namespace ximgproc {
@@ -75,6 +76,50 @@ CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst, int op, InputAr
                                 int borderType = BORDER_CONSTANT, const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 //! @}
+
+// normalizeAnchor; Copied from filterengine.hpp.
+static inline Point normalizeAnchor(Point anchor, Size ksize)
+{
+    if (anchor.x == -1)
+        anchor.x = ksize.width / 2;
+    if (anchor.y == -1)
+        anchor.y = ksize.height / 2;
+    CV_Assert(anchor.inside(Rect(0, 0, ksize.width, ksize.height)));
+    return anchor;
+}
+
+enum Dim
+{
+    Col, Row
+};
+
+struct StStep
+{
+    StStep(int dimR, int dimC, Dim _ax)
+    {
+        dimRow = dimR;
+        dimCol = dimC;
+        ax = _ax;
+    }
+    int dimRow;
+    int dimCol;
+    Dim ax;
+};
+
+/*
+* Find a smaller set of power-of-2 rectangles to cover the kernel.
+* - The width and the height of each rectangles are power of 2.
+* - Overlappings of rectangles are allowed.
+*
+* this method may be applied for the covering polygon problem with rectangle.
+* https://www.sciencedirect.com/science/article/pii/S0019995884800121z
+*/
+CV_EXPORTS_W std::vector<Rect> genPow2RectsToCoverKernel(InputArray kernel);
+//
+///*
+//* Plan the order to calculate the sparse table nodes.
+//*/
+CV_EXPORTS_W std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> requiredSparseTableNodeMap);
 
 } // namespace st
 } // namespace ximgproc

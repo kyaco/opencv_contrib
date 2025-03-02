@@ -14,41 +14,7 @@ namespace cv {
 namespace ximgproc {
 namespace stMorph {
 
-// normalizeAnchor; Copied from filterengine.hpp.
-static inline Point normalizeAnchor(Point anchor, Size ksize)
-{
-    if (anchor.x == -1)
-        anchor.x = ksize.width / 2;
-    if (anchor.y == -1)
-        anchor.y = ksize.height / 2;
-    CV_Assert(anchor.inside(Rect(0, 0, ksize.width, ksize.height)));
-    return anchor;
-}
-
-enum Dim
-{
-    Col, Row
-};
-
-struct StStep
-{
-    StStep(int dimR, int dimC, Dim _ax)
-    {
-        dimRow = dimR;
-        dimCol = dimC;
-        ax = _ax;
-    }
-    int dimRow;
-    int dimCol;
-    Dim ax;
-};
-
-/*
-* Find a smaller set of power-of-2 rectangles to cover the kernel.
-* - The width and the height of each rectangles are power of 2.
-* - Overlappings of rectangles are allowed.
-*/
-static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
+std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 {
     CV_Assert(_kernel.type() == CV_8UC1);
 
@@ -119,11 +85,14 @@ static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
     std::vector<Rect> p2Rects;
     for (int rowDepth = 0; rowDepth <= log2[kernel.rows]; rowDepth++)
     {
-        int rowSkip = (1 << rowDepth) - 1;
+        int rowOfst = 1 << rowDepth;
+        int rowSkip = rowOfst - 1;
         int rowLim = kernel.rows - rowSkip;
+        int x = rowOfst * kernel.cols;
         for (int colDepth = 0; colDepth <= log2[kernel.cols]; colDepth++)
         {
-            int colSkip = (1 << colDepth) - 1;
+            int colOfst = 1 << colDepth;
+            int colSkip = colOfst - 1;
             int colLim = kernel.cols - colSkip;
 
             uchar* ptr = st[rowDepth][colDepth].ptr();
@@ -139,10 +108,10 @@ static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
                     if (row > 0 && ptr[-kernel.cols] && row < rowLim && ptr[kernel.cols] == 1) continue;
 
                     // ignore one of neighbor block is white; will be alive in deeper table
-                    if (col + (1 << colDepth) <= colLim && ptr[1 << colDepth] == 1) continue;
-                    if (col - (1 << colDepth) >= 0 && ptr[-(1 << colDepth)] == 1) continue;
-                    if (row + (1 << rowDepth) <= rowLim && ptr[(1 << rowDepth) * kernel.cols] == 1) continue;
-                    if (row - (1 << rowDepth) >= 0 && ptr[-(1 << rowDepth) * kernel.cols] == 1) continue;
+                    if (col + colOfst <= colLim && ptr[colOfst] == 1) continue;
+                    if (col - colOfst >= 0 && ptr[-colOfst] == 1) continue;
+                    if (row + rowOfst <= rowLim && ptr[x] == 1) continue;
+                    if (row - rowOfst >= 0 && ptr[-x] == 1) continue;
 
                     p2Rects.emplace_back(col, row, colDepth, rowDepth);
                 }
@@ -154,6 +123,8 @@ static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
     return p2Rects;
 }
 
+std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> sparseMatMap)
+{
 /*
 *
 *
@@ -163,8 +134,6 @@ static std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 * https://link.springer.com/article/10.1007/BF01758762
 *
 */
-static std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> sparseMatMap)
-{
     auto comparePos = [](Point lp, Point rp) {
         int diffx = lp.x - rp.x;
         int diffy = lp.y - rp.y;
@@ -174,15 +143,12 @@ static std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<b
         return diffy < 0;
         };
     std::priority_queue<Point, std::vector<Point>, decltype(comparePos)> points{ comparePos };
+    sparseMatMap[0][0] = true;
     for (int r = 0; r < sparseMatMap.size(); r++)
-    {
         for (int c = 0; c < sparseMatMap[r].size(); c++)
-        {
             if (sparseMatMap[r][c]) points.push(Point(c, r));
-        }
-    }
 
-    std::vector<StStep> ans;
+    std::vector<StStep> plan;
     while (points.size() >= 2)
     {
         Point p1 = points.top();
@@ -197,19 +163,16 @@ static std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<b
             points.push(Point(newX, newY));
         }
 
-        for (int col = p1.x - 1; col >= newX; col--) ans.emplace_back(p1.y, col, Dim::Col);
-        for (int row = p1.y - 1; row >= newY; row--) ans.emplace_back(row, p1.x, Dim::Row);
-        for (int col = p2.x - 1; col >= newX; col--) ans.emplace_back(p2.y, col, Dim::Col);
-        for (int row = p2.y - 1; row >= newY; row--) ans.emplace_back(row, p2.x, Dim::Row);
+        for (int col = p1.x - 1; col >= newX; col--) plan.emplace_back(p1.y, col, Dim::Col);
+        for (int row = p1.y - 1; row >= newY; row--) plan.emplace_back(row, p1.x, Dim::Row);
+        for (int col = p2.x - 1; col >= newX; col--) plan.emplace_back(p2.y, col, Dim::Col);
+        for (int row = p2.y - 1; row >= newY; row--) plan.emplace_back(row, p2.x, Dim::Row);
     }
-    Point p1 = points.top();
-    for (int col = p1.x - 1; col >= 0; col--) ans.emplace_back(p1.y, col, Dim::Col);
-    for (int row = p1.y - 1; row >= 0; row--) ans.emplace_back(row, 0, Dim::Row);
-    std::reverse(ans.begin(), ans.end());
-    return ans;
+    std::reverse(plan.begin(), plan.end());
+    return plan;
 }
 
-static void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
 
@@ -243,7 +206,8 @@ static void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, 
         dstPtr += borderSkipStep;
     }
 }
-static void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
+
+void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
 
