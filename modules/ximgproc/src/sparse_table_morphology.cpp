@@ -294,20 +294,21 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
     cv::copyMakeBorder(src, expandedSrc, anchor.y, kernel.cols - 1 - anchor.y, anchor.x, kernel.rows - 1 - anchor.x, borderType, bV);
 
     // calculate sparse table nodes
-    std::vector<std::vector<Mat*>> st(rowDepthLim, std::vector<Mat*>(colDepthLim));
-    st[0][0] = &expandedSrc;
+    std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
+    st[0][0] = expandedSrc;
     for (int i = 0; i < stPlan.size(); i++)
     {
         StStep step = stPlan[i];
+        Mat node(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
         switch (step.ax)
         {
         case Dim::Col:
-            st[step.dimRow][step.dimCol + 1] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
-            makeMinSparseTableMat(*st[step.dimRow][step.dimCol], *st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
+            st[step.dimRow][step.dimCol + 1] = node;
+            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
             break;
         case Dim::Row:
-            st[step.dimRow + 1][step.dimCol] = new Mat(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
-            makeMinSparseTableMat(*st[step.dimRow][step.dimCol], *st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
+            st[step.dimRow + 1][step.dimCol] = node;
+            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
             break;
         }
     }
@@ -319,7 +320,7 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
     for (int i = 0; i < pow2Rects.size(); i++)
     {
         Rect rect = pow2Rects[i];
-        Mat sparseMat = *st[rect.height][rect.width];
+        Mat sparseMat = st[rect.height][rect.width];
         int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.step.p[1];
         uchar* srcPtr = sparseMat.ptr(rect.y, rect.x);
         uchar* dstPtr = dst.ptr();
