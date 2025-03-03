@@ -37,7 +37,7 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
         int colSkip = (1 << colDepth) - 1;
         int colLim = kernel.cols - colSkip;
 
-        st[0][colDepth] = Mat::zeros(kernel.rows, kernel.cols, kernel.type());
+        st[0][colDepth].create(kernel.size(), kernel.type());
         uchar* ptr1 = st[0][colDepth - 1].ptr();
         uchar* ptr2 = st[0][colDepth - 1].ptr(rowStep, colStep);
         uchar* dst = st[0][colDepth].ptr();
@@ -63,7 +63,7 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
             int colSkip = (1 << colDepth) - 1;
             int colLim = kernel.cols - colSkip;
 
-            st[rowDepth][colDepth] = Mat::zeros(kernel.rows, kernel.cols, kernel.type());
+            st[rowDepth][colDepth].create(kernel.size(), kernel.type());
             uchar* ptr1 = st[rowDepth - 1][colDepth].ptr();
             uchar* ptr2 = st[rowDepth - 1][colDepth].ptr(rowStep, colStep);
             uchar* dst = st[rowDepth][colDepth].ptr();
@@ -181,6 +181,7 @@ void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int col
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
 
+    dst.create(src.size(), src.type());
     Mat src_ = src.getMat();
     Mat dst_ = dst.getMat();
     int rowLim = src.rows() - rowStep;
@@ -299,15 +300,12 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
     for (int i = 0; i < stPlan.size(); i++)
     {
         StStep step = stPlan[i];
-        Mat node(expandedSrc.rows, expandedSrc.cols, expandedSrc.type());
         switch (step.ax)
         {
         case Dim::Col:
-            st[step.dimRow][step.dimCol + 1] = node;
             makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
             break;
         case Dim::Row:
-            st[step.dimRow + 1][step.dimCol] = node;
             makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
             break;
         }
@@ -315,6 +313,7 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
 
     // result constructioin
     Mat dst = _dst.getMat();
+    dst.create(_src.size(), _src.type());
     dst.setTo(ZERO);
     int colChLim = src.cols * src.channels();
     for (int i = 0; i < pow2Rects.size(); i++)
