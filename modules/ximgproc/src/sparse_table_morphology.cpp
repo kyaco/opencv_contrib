@@ -10,7 +10,6 @@
 #include <algorithm>
 
 namespace cv {
-namespace ximgproc {
 namespace stMorph {
 
 std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
@@ -20,7 +19,7 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
     Mat kernel = _kernel.getMat();
 
     // generate log2 table
-    int len = max(kernel.rows, kernel.cols) + 1;
+    int len = std::max(kernel.rows, kernel.cols) + 1;
     std::vector<int> log2(len);
     for (int i = 2; i < len; i++) log2[i] = log2[i >> 1] + 1;
 
@@ -103,8 +102,10 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
                     if (ptr[0] == 0) continue;
 
                     // ignore if both sides are white by each axis
-                    if (col > 0 && ptr[-1] == 1 && col < colLim && ptr[1] == 1) continue;
-                    if (row > 0 && ptr[-kernel.cols] && row < rowLim && ptr[kernel.cols] == 1) continue;
+                    if (col > 0 && ptr[-1] == 1
+                        && col < colLim && ptr[1] == 1) continue;
+                    if (row > 0 && ptr[-kernel.cols]
+                        && row < rowLim && ptr[kernel.cols] == 1) continue;
 
                     // ignore one of neighbor block is white; will be alive in deeper table
                     if (col + colOfst <= colLim && ptr[colOfst] == 1) continue;
@@ -122,7 +123,7 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
     return p2Rects;
 }
 
-std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> sparseMatMap)
+std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> sparseMatMap)
 {
 /*
 *
@@ -150,8 +151,8 @@ std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> s
         {
             for (int j = i + 1; j < pos.size(); j++)
             {
-                int _x = min(pos[i].x, pos[j].x);
-                int _y = min(pos[i].y, pos[j].y);
+                int _x = std::min(pos[i].x, pos[j].x);
+                int _y = std::min(pos[i].y, pos[j].y);
                 int cost = _x + _y;
                 if (maxCost < cost)
                 {
@@ -163,17 +164,21 @@ std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> s
                 }
             }
         }
-        for (int col = pos[maxI].x - 1; col >= maxX; col--) plan.emplace_back(pos[maxI].y, col, Dim::Col);
-        for (int row = pos[maxI].y - 1; row >= maxY; row--) plan.emplace_back(row, maxX, Dim::Row);
-        for (int col = pos[maxJ].x - 1; col >= maxX; col--) plan.emplace_back(pos[maxJ].y, col, Dim::Col);
-        for (int row = pos[maxJ].y - 1; row >= maxY; row--) plan.emplace_back(row, maxX, Dim::Row);
+        for (int col = pos[maxI].x - 1; col >= maxX; col--)
+            plan.emplace_back(pos[maxI].y, col, Dim::Col);
+        for (int row = pos[maxI].y - 1; row >= maxY; row--)
+            plan.emplace_back(row, maxX, Dim::Row);
+        for (int col = pos[maxJ].x - 1; col >= maxX; col--)
+            plan.emplace_back(pos[maxJ].y, col, Dim::Col);
+        for (int row = pos[maxJ].y - 1; row >= maxY; row--)
+            plan.emplace_back(row, maxX, Dim::Row);
 
         pos[maxI] = Point(maxX, maxY);
-        std::swap(pos[maxJ], pos[pos.size() - 1]);
+        swap(pos[maxJ], pos[pos.size() - 1]);
         pos.pop_back();
     }
 
-    std::reverse(plan.begin(), plan.end());
+    reverse(plan.begin(), plan.end());
     return plan;
 }
 
@@ -195,7 +200,7 @@ void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int col
     {
         for (int colCh = 0; colCh < colChLim; colCh++)
         {
-            // Somehow min(a,b) or a<b?a:b are slower.
+            // Somehow std::min(a,b) or a<b?a:b are slower.
             if (*srcPtr1 < *srcPtr2)
             {
                 *dstPtr++ = *srcPtr1++;
@@ -247,12 +252,14 @@ void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int col
     }
 }
 
-void dilate(InputArray src, OutputArray dst, InputArray kernel, Point anchor,
+void dilate(InputArray src, OutputArray dst, InputArray kernel,
+    Point anchor, int iterations,
     int borderType, const Scalar& borderValue)
 {
 }
 
-void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
+void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
+    Point anchor, int iterations,
     int borderType, const Scalar& borderValue)
 {
     uchar ZERO = 255;
@@ -262,7 +269,7 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
     anchor = stMorph::normalizeAnchor(anchor, kernel.size());
 
     Scalar bV = borderValue;
-    if (borderType == cv::BorderTypes::BORDER_CONSTANT && borderValue == cv::morphologyDefaultBorderValue())
+    if (borderType == BorderTypes::BORDER_CONSTANT && borderValue == morphologyDefaultBorderValue())
     {
         bV = Scalar::all(ZERO);
         // see morph.dispatch.cpp:111
@@ -285,14 +292,18 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
 
     // list up required sparse table nodes.
     std::vector<std::vector<bool>> sparseMatMap(rowDepthLim, std::vector<bool>(colDepthLim, false));
-    for (int i = 0; i < pow2Rects.size(); i++) sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
+    for (int i = 0; i < pow2Rects.size(); i++)
+        sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
 
     // plan how to calculate required nodes of 2D sparse table.
-    std::vector<StStep> stPlan = planSparseTableConstruction(sparseMatMap);
+    std::vector<StStep> stPlan = planSparseTableConstr(sparseMatMap);
 
     // adding border to the source.
     Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
-    cv::copyMakeBorder(src, expandedSrc, anchor.y, kernel.cols - 1 - anchor.y, anchor.x, kernel.rows - 1 - anchor.x, borderType, bV);
+    copyMakeBorder(src, expandedSrc,
+        anchor.y, kernel.cols - 1 - anchor.y,
+        anchor.x, kernel.rows - 1 - anchor.x,
+        borderType, bV);
 
     // calculate sparse table nodes
     std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
@@ -303,10 +314,12 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel, Point anchor,
         switch (step.ax)
         {
         case Dim::Col:
-            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1], 0, 1 << step.dimCol);
+            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1],
+                                    0, 1 << step.dimCol);
             break;
         case Dim::Row:
-            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol], 1 << step.dimRow, 0);
+            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol],
+                                    1 << step.dimRow, 0);
             break;
         }
     }
@@ -342,6 +355,4 @@ void morphologyEx(InputArray _src, OutputArray _dst, int op,
 {
 }
 
-} // namespace st
-} // namespace ximgproc
-} // namespace cv
+}} // cv::st::

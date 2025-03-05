@@ -9,7 +9,6 @@
 #include <vector>
 
 namespace cv {
-namespace ximgproc {
 namespace stMorph {
 
 //! @addtogroup imgproc_filter
@@ -25,13 +24,16 @@ namespace stMorph {
  * structuring element is used. Kernel can be created using #getStructuringElement.
  * @param anchor position of the anchor within the element; default value (-1, -1) means that the
  * anchor is at the element center.
+ * @param iterations number of times erosion is applied.
  * @param borderType pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
  * @param borderValue border value in case of a constant border
  *
  * @see cv::erode
  */
-CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel, Point anchor = Point(-1,-1),
-                          int borderType = BORDER_CONSTANT, const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
+                          Point anchor = Point(-1,-1), int iterations = 1,
+                          int borderType = BORDER_CONSTANT,
+                          const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
  * @brief Faster implementation of cv::dilate with sparse table concept.
@@ -43,13 +45,16 @@ CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel, Poi
  * structuring element is used. Kernel can be created using #getStructuringElement
  * @param anchor position of the anchor within the element; default value (-1, -1) means that the
  * anchor is at the element center.
+ * @param iterations number of times dilation is applied.
  * @param borderType pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not suported.
  * @param borderValue border value in case of a constant border
  *
  * @see cv::dilate
  */
-CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel, Point anchor = Point(-1, -1),
-                          int borderType = BORDER_CONSTANT, const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
+                          Point anchor = Point(-1,-1), int iterations = 1,
+                          int borderType = BORDER_CONSTANT,
+                          const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
  * @brief Faster implementation of cv::morphologyEx with sparse table concept.
@@ -71,9 +76,11 @@ CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel, Po
  *
  * @see cv::morphologyEx
  */
-CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst, int op, InputArray kernel, Point anchor = Point(-1,-1),
-                                int iterations = 1,
-                                int borderType = BORDER_CONSTANT, const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
+                                int op, InputArray kernel,
+                                Point anchor = Point(-1,-1), int iterations = 1,
+                                int borderType = BORDER_CONSTANT,
+                                const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 //! @}
 
@@ -119,10 +126,8 @@ CV_EXPORTS_W std::vector<Rect> genPow2RectsToCoverKernel(InputArray kernel);
 ///*
 //* Plan the order to calculate the sparse table nodes.
 //*/
-CV_EXPORTS_W std::vector<StStep> planSparseTableConstruction(std::vector<std::vector<bool>> requiredSparseTableNodeMap);
+CV_EXPORTS_W std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> stNodeMap);
 
-} // namespace st
-} // namespace ximgproc
-} // namespace cv
+}} // cv::stMorph::
 
 #endif
