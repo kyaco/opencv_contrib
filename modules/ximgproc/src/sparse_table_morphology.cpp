@@ -3,11 +3,8 @@
 // of this distribution and at http://opencv.org/license.html.
 
 #include "precomp.hpp"
-#include <math.h>
 #include <vector>
-#include <iostream>
-#include <stack>
-#include <algorithm>
+#include <limits>
 
 namespace cv {
 namespace stMorph {
@@ -182,6 +179,7 @@ std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> sparseM
     return plan;
 }
 
+template <typename T>
 void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
@@ -193,9 +191,9 @@ void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int col
     int colChLim = (src.cols() - colStep) * src.channels();
     int borderSkipStep = colStep * src.channels();
 
-    uchar* srcPtr1 = src_.ptr<uchar>(0, 0);
-    uchar* srcPtr2 = src_.ptr<uchar>(rowStep, colStep);
-    uchar* dstPtr = dst_.ptr<uchar>(0, 0);
+    T* srcPtr1 = src_.ptr<T>(0, 0);
+    T* srcPtr2 = src_.ptr<T>(rowStep, colStep);
+    T* dstPtr = dst_.ptr<T>(0, 0);
     for (int row = 0; row < rowLim; row++)
     {
         for (int colCh = 0; colCh < colChLim; colCh++)
@@ -218,6 +216,7 @@ void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int col
     }
 }
 
+template <typename T>
 void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
 {
     CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
@@ -228,9 +227,9 @@ void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int col
     int colChLim = (src.cols() - colStep) * src.channels();
     int borderSkipStep = colStep * src.channels();
 
-    uchar* srcPtr1 = src_.ptr<uchar>(0, 0);
-    uchar* srcPtr2 = src_.ptr<uchar>(rowStep, colStep);
-    uchar* dstPtr = dst_.ptr<uchar>(0, 0);
+    T* srcPtr1 = src_.ptr<T>(0, 0);
+    T* srcPtr2 = src_.ptr<T>(rowStep, colStep);
+    T* dstPtr = dst_.ptr<T>(0, 0);
     for (int row = 0; row < rowLim; row++)
     {
         for (int colCh = 0; colCh < colChLim; colCh++)
@@ -252,29 +251,15 @@ void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int col
     }
 }
 
-void dilate(InputArray src, OutputArray dst, InputArray kernel,
+template <typename T>
+void _erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     Point anchor, int iterations,
     int borderType, const Scalar& borderValue)
 {
-}
-
-void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
-    Point anchor, int iterations,
-    int borderType, const Scalar& borderValue)
-{
-    uchar ZERO = 255;
-
     Mat src = _src.getMat();
+
     Mat kernel = _kernel.getMat();
     anchor = stMorph::normalizeAnchor(anchor, kernel.size());
-
-    Scalar bV = borderValue;
-    if (borderType == BorderTypes::BORDER_CONSTANT && borderValue == morphologyDefaultBorderValue())
-    {
-        bV = Scalar::all(ZERO);
-        // see morph.dispatch.cpp:111
-        // need to think CV_8U/CV_16U/CV_16S/CV_32F/CV64F
-    }
 
     // Generate list of rectangles whose width and height are power of 2.
     // (The width and height values of returned rects ​​are the log2 of the actual values.)
@@ -299,13 +284,19 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     std::vector<StStep> stPlan = planSparseTableConstr(sparseMatMap);
 
     // adding border to the source.
+    Scalar bV = borderValue;
+    if (borderType == BorderTypes::BORDER_CONSTANT
+        && borderValue == morphologyDefaultBorderValue())
+        bV = Scalar::all(std::numeric_limits<T>::max());
     Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
     copyMakeBorder(src, expandedSrc,
         anchor.y, kernel.cols - 1 - anchor.y,
         anchor.x, kernel.rows - 1 - anchor.x,
         borderType, bV);
 
-    // calculate sparse table nodes
+    _dst.create(_src.size(), _src.type());
+    Mat dst = _dst.getMat();
+
     std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
     st[0][0] = expandedSrc;
     for (int i = 0; i < stPlan.size(); i++)
@@ -314,29 +305,27 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
         switch (step.ax)
         {
         case Dim::Col:
-            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1],
+            makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1],
                                     0, 1 << step.dimCol);
             break;
         case Dim::Row:
-            makeMinSparseTableMat(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol],
+            makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol],
                                     1 << step.dimRow, 0);
             break;
         }
     }
 
     // result constructioin
-    Mat dst = _dst.getMat();
-    dst.create(_src.size(), _src.type());
-    dst.setTo(ZERO);
-    int colChLim = src.cols * src.channels();
+    dst.setTo(std::numeric_limits<T>::max());
+    int colChLim = dst.cols * dst.channels();
     for (int i = 0; i < pow2Rects.size(); i++)
     {
         Rect rect = pow2Rects[i];
         Mat sparseMat = st[rect.height][rect.width];
-        int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.step.p[1];
-        uchar* srcPtr = sparseMat.ptr(rect.y, rect.x);
-        uchar* dstPtr = dst.ptr();
-        for (int row = 0; row < src.rows; row++)
+        int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.channels();
+        T* srcPtr = sparseMat.ptr<T>(rect.y, rect.x);
+        T* dstPtr = dst.ptr<T>();
+        for (int row = 0; row < dst.rows; row++)
         {
             for (int col = 0; col < colChLim; col++)
             {
@@ -346,6 +335,43 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
             }
             srcPtr += sideBorderSkipStep;
         }
+    }
+}
+
+void dilate(InputArray src, OutputArray dst, InputArray kernel,
+    Point anchor, int iterations,
+    int borderType, const Scalar& borderValue)
+{
+}
+
+void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
+    Point anchor, int iterations,
+    int borderType, const Scalar& borderValue)
+{
+    switch (_src.depth())
+    {
+    case CV_8U:
+        _erode<uchar>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        return;
+    case CV_8S:
+        _erode<char>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        return;
+    case CV_16U:
+        _erode<ushort>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        return;
+    case CV_16S:
+        _erode<short>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        return;
+    case CV_32S:
+        _erode<int>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        return;
+    case CV_32F:
+        _erode<float>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        return;
+    case CV_64F:
+        _erode<double>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        return;
+
     }
 }
 
