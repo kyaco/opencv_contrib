@@ -3,8 +3,9 @@
 // of this distribution and at http://opencv.org/license.html.
 
 #include "precomp.hpp"
-#include <vector>
 #include <limits>
+#include <utility>
+#include <vector>
 
 namespace cv {
 namespace stMorph {
@@ -256,10 +257,7 @@ void _erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     Point anchor, int iterations,
     int borderType, const Scalar& borderValue)
 {
-    Mat src = _src.getMat();
-
     Mat kernel = _kernel.getMat();
-    anchor = stMorph::normalizeAnchor(anchor, kernel.size());
 
     // Generate list of rectangles whose width and height are power of 2.
     // (The width and height values of returned rects ​​are the log2 of the actual values.)
@@ -283,59 +281,66 @@ void _erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     // plan how to calculate required nodes of 2D sparse table.
     std::vector<StStep> stPlan = planSparseTableConstr(sparseMatMap);
 
-    // adding border to the source.
-    Scalar bV = borderValue;
-    if (borderType == BorderTypes::BORDER_CONSTANT
-        && borderValue == morphologyDefaultBorderValue())
-        bV = Scalar::all(std::numeric_limits<T>::max());
-    Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
-    copyMakeBorder(src, expandedSrc,
-        anchor.y, kernel.cols - 1 - anchor.y,
-        anchor.x, kernel.rows - 1 - anchor.x,
-        borderType, bV);
+    Mat src = _src.getMat();
 
-    _dst.create(_src.size(), _src.type());
-    Mat dst = _dst.getMat();
-
-    std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
-    st[0][0] = expandedSrc;
-    for (int i = 0; i < stPlan.size(); i++)
+    do
     {
-        StStep step = stPlan[i];
-        switch (step.ax)
-        {
-        case Dim::Col:
-            makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1],
-                                    0, 1 << step.dimCol);
-            break;
-        case Dim::Row:
-            makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol],
-                                    1 << step.dimRow, 0);
-            break;
-        }
-    }
+        // adding border to the source.
+        Scalar bV = borderValue;
+        if (borderType == BorderTypes::BORDER_CONSTANT
+            && borderValue == morphologyDefaultBorderValue())
+            bV = Scalar::all(std::numeric_limits<T>::max());
+        Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
+        copyMakeBorder(src, expandedSrc,
+            anchor.y, kernel.cols - 1 - anchor.y,
+            anchor.x, kernel.rows - 1 - anchor.x,
+            borderType, bV);
 
-    // result constructioin
-    dst.setTo(std::numeric_limits<T>::max());
-    int colChLim = dst.cols * dst.channels();
-    for (int i = 0; i < pow2Rects.size(); i++)
-    {
-        Rect rect = pow2Rects[i];
-        Mat sparseMat = st[rect.height][rect.width];
-        int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.channels();
-        T* srcPtr = sparseMat.ptr<T>(rect.y, rect.x);
-        T* dstPtr = dst.ptr<T>();
-        for (int row = 0; row < dst.rows; row++)
+        _dst.create(_src.size(), _src.type());
+        Mat dst = _dst.getMat();
+
+        std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
+        st[0][0] = expandedSrc;
+        for (int i = 0; i < stPlan.size(); i++)
         {
-            for (int col = 0; col < colChLim; col++)
+            StStep step = stPlan[i];
+            switch (step.ax)
             {
-                if (*srcPtr < *dstPtr) *dstPtr = *srcPtr;
-                srcPtr++;
-                dstPtr++;
+            case Dim::Col:
+                makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1],
+                    0, 1 << step.dimCol);
+                break;
+            case Dim::Row:
+                makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol],
+                    1 << step.dimRow, 0);
+                break;
             }
-            srcPtr += sideBorderSkipStep;
         }
-    }
+
+        // result constructioin
+        dst.setTo(std::numeric_limits<T>::max());
+        int colChLim = dst.cols * dst.channels();
+        for (int i = 0; i < pow2Rects.size(); i++)
+        {
+            Rect rect = pow2Rects[i];
+            Mat sparseMat = st[rect.height][rect.width];
+            int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.channels();
+            T* srcPtr = sparseMat.ptr<T>(rect.y, rect.x);
+            T* dstPtr = dst.ptr<T>();
+            for (int row = 0; row < dst.rows; row++)
+            {
+                for (int col = 0; col < colChLim; col++)
+                {
+                    if (*srcPtr < *dstPtr) *dstPtr = *srcPtr;
+                    srcPtr++;
+                    dstPtr++;
+                }
+                srcPtr += sideBorderSkipStep;
+            }
+        }
+
+        src = dst;
+    } while (--iterations > 0);
 }
 
 void dilate(InputArray src, OutputArray dst, InputArray kernel,
@@ -348,30 +353,50 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     Point anchor, int iterations,
     int borderType, const Scalar& borderValue)
 {
+    Mat kernel = _kernel.getMat();
+    if (iterations == 0 || kernel.rows * kernel.cols == 1)
+    {
+        _src.copyTo(_dst);
+        return;
+    }
+    // Fix kernel in case of it is empty.
+    if (kernel.empty())
+    {
+        kernel = getStructuringElement(MORPH_RECT, Size(1 + iterations * 2, 1 + iterations * 2));
+        anchor = Point(iterations, iterations);
+        iterations = 1;
+    }
+    if (countNonZero(kernel) == 0)
+    {
+        kernel.at<uchar>(0, 0) = 1;
+    }
+    // Fix anchor to the center of the kernel.
+    anchor = stMorph::normalizeAnchor(anchor, kernel.size());
+
+    // erode operation
     switch (_src.depth())
     {
     case CV_8U:
-        _erode<uchar>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        _erode<uchar>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
         return;
     case CV_8S:
-        _erode<char>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        _erode<char>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
         return;
     case CV_16U:
-        _erode<ushort>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        _erode<ushort>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
         return;
     case CV_16S:
-        _erode<short>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        _erode<short>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
         return;
     case CV_32S:
-        _erode<int>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        _erode<int>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
         return;
     case CV_32F:
-        _erode<float>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        _erode<float>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
         return;
     case CV_64F:
-        _erode<double>(_src, _dst, _kernel, anchor, iterations, borderType, borderValue);
+        _erode<double>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
         return;
-
     }
 }
 

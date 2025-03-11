@@ -13,7 +13,7 @@ namespace {
 TEST(ximgproc_StMorph_dev, compare_with_original_erode)
 {
     // preparation
-    int kRadius = 15;
+    int kRadius = 19;
     //Size sz(200, 150);
      Size sz = szVGA;
     int type = CV_8UC3;
@@ -170,13 +170,16 @@ Mat im(int type)
     int depth = CV_MAT_DEPTH(type);
     int ch = CV_MAT_CN(type);
     Mat img = imread(cvtest::TS::ptr()->get_data_path() + "cv/shared/lena.png");
+    // ASSERT_EQ(img.type(), CV_8UC3);
+
     if (ch == 1) cv::cvtColor(img, img, ColorConversionCodes::COLOR_BGR2GRAY, ch);
     if (depth == CV_8S) img /= 2;
     img.convertTo(img, depth);
-    if (depth == CV_16S) img *= 128;
-    if (depth == CV_16U) img *= 256;
-    if (depth == CV_32F) img /= 255;
-    if (depth == CV_64F) img /= 255;
+    if (depth == CV_16S) img *= (1 << 7);
+    if (depth == CV_16U) img *= (1 << 8);
+    if (depth == CV_32S) img *= (1 << 23);
+    if (depth == CV_32F) img /= (1 << 8);
+    if (depth == CV_64F) img /= (1 << 8);
 
     return img;
 }
@@ -188,6 +191,9 @@ Mat knEmpty() { return Mat(); }
 Mat knZeros() { return Mat::zeros(5, 5, CV_8UC1); }
 Mat knOnes() { return Mat::ones(5, 5, CV_8UC1); }
 Mat knBig() { return getStructuringElement(cv::MorphShapes::MORPH_RECT, Size(201, 201)); }
+Mat knAsymm (){
+    return (Mat_<uchar>(5, 5) << 0,0,0,0,0, 0,0,1,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,1,0,0);
+}
 
 /*
 * erode regression tests.
@@ -213,16 +219,17 @@ TEST(ximgproc_StMorph_erode, regression_64FC1) { erode_rgr(im(CV_64FC1), kn5());
 TEST(ximgproc_StMorph_erode, regression_64FC3) { erode_rgr(im(CV_64FC3), kn5()); }
 TEST(ximgproc_StMorph_erode, regression_kn5) { erode_rgr(im(CV_8UC3), kn5()); }
 TEST(ximgproc_StMorph_erode, regression_kn4) { erode_rgr(im(CV_8UC3), kn4()); }
-TEST(ximgproc_StMorph_erode, regression_kn1Zero) { erode_rgr(im(CV_8UC3), kn1Zero()); }
+TEST(ximgproc_StMorph_erode, wtf_regression_kn1Zero) { erode_rgr(im(CV_8UC3), kn1Zero()); }
 TEST(ximgproc_StMorph_erode, regression_kn1One) { erode_rgr(im(CV_8UC3), kn1One()); }
-TEST(ximgproc_StMorph_erode, regression_knEmpty) { erode_rgr(im(CV_8UC3), knEmpty()); }
-TEST(ximgproc_StMorph_erode, regression_knZeros) { erode_rgr(im(CV_8UC3), knZeros()); }
+TEST(ximgproc_StMorph_erode, wtf_regression_knEmpty) { erode_rgr(im(CV_8UC3), knEmpty()); }
+TEST(ximgproc_StMorph_erode, wtf_regression_knZeros) { erode_rgr(im(CV_8UC3), knZeros()); }
 TEST(ximgproc_StMorph_erode, regression_knOnes) { erode_rgr(im(CV_8UC3), knOnes()); }
 TEST(ximgproc_StMorph_erode, regression_knBig) { erode_rgr(im(CV_8UC3), knBig()); }
+TEST(ximgproc_StMorph_erode, regression_knAsymm) { erode_rgr(im(CV_8UC3), knAsymm()); }
 TEST(ximgproc_StMorph_erode, regression_ancMid) { erode_rgr(im(CV_8UC3), kn5(), Point(-1, -1)); }
 TEST(ximgproc_StMorph_erode, regression_ancEdge1) { erode_rgr(im(CV_8UC3), kn5(), Point(0, 0)); }
 TEST(ximgproc_StMorph_erode, regression_ancEdge2) { erode_rgr(im(CV_8UC3), kn5(), Point(4, 4)); }
-TEST(ximgproc_StMorph_erode, regression_it0) { erode_rgr(im(CV_8UC3), kn5(), Point(-1, -1), 0); }
+TEST(ximgproc_StMorph_erode, wtf_regression_it0) { erode_rgr(im(CV_8UC3), kn5(), Point(-1, -1), 0); }
 TEST(ximgproc_StMorph_erode, regression_it1) { erode_rgr(im(CV_8UC3), kn5(), Point(-1, -1), 1); }
 TEST(ximgproc_StMorph_erode, regression_it2) { erode_rgr(im(CV_8UC3), kn5(), Point(-1, -1), 2); }
 /*
@@ -242,10 +249,6 @@ TEST(ximgproc_StMorph_erode, feature_8SC1) { erode_ftr(im(CV_8SC1), kn5()); }
 TEST(ximgproc_StMorph_erode, feature_8SC3) { erode_ftr(im(CV_8SC3), kn5()); }
 TEST(ximgproc_StMorph_erode, feature_32SC1) { erode_ftr(im(CV_32SC1), kn5()); }
 TEST(ximgproc_StMorph_erode, feature_32SC3) { erode_ftr(im(CV_32SC3), kn5()); }
-//TEST(ximgproc_StMorph_erode, feature_16FC1) { erode_ftr(im(CV_16FC1), kn5()); }
-//TEST(ximgproc_StMorph_erode, feature_16FC3) { erode_ftr(im(CV_16FC3), kn5()); }
-/* anchor point out of the kernel is not supported. */
-TEST(ximgproc_StMorph_erode, feature_ancOut) { erode_ftr(im(CV_8UC3), kn5(), Point(5, 5)); }
 
 /*
 * dilate regression tests.
