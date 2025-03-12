@@ -550,6 +550,86 @@ void morphologyEx(InputArray _src, OutputArray _dst, int op,
     InputArray _kernel, Point anchor, int iterations,
     int borderType, const Scalar& borderValue)
 {
+    CV_INSTRUMENT_REGION();
+
+    CV_Assert(!_src.empty());
+
+    Mat kernel = _kernel.getMat();
+    if (kernel.empty())
+    {
+        kernel = getStructuringElement(MORPH_RECT, Size(3, 3), Point(1, 1));
+    }
+
+    Mat src = _src.getMat(), temp;
+    _dst.create(src.size(), src.type());
+    Mat dst = _dst.getMat();
+
+    switch (op)
+    {
+    case MORPH_ERODE:
+        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderValue);
+        break;
+    case MORPH_DILATE:
+        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderValue);
+        break;
+    case MORPH_OPEN:
+        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::dilate(dst, dst, kernel, anchor, iterations, borderType, borderValue);
+        break;
+    case MORPH_CLOSE:
+        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::erode(dst, dst, kernel, anchor, iterations, borderType, borderValue);
+        break;
+    case MORPH_GRADIENT:
+        stMorph::erode(src, temp, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderValue);
+        dst -= temp;
+        break;
+    case MORPH_TOPHAT:
+        if (src.data != dst.data)
+            temp = dst;
+        stMorph::erode(src, temp, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::dilate(temp, temp, kernel, anchor, iterations, borderType, borderValue);
+        dst = src - temp;
+        break;
+    case MORPH_BLACKHAT:
+        if (src.data != dst.data)
+            temp = dst;
+        stMorph::dilate(src, temp, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::erode(temp, temp, kernel, anchor, iterations, borderType, borderValue);
+        dst = temp - src;
+        break;
+    case MORPH_HITMISS:
+        CV_Assert(src.type() == CV_8UC1);
+        if (countNonZero(kernel) <= 0)
+        {
+            src.copyTo(dst);
+            break;
+        }
+        {
+            Mat k1, k2, e1, e2;
+            k1 = (kernel == 1);
+            k2 = (kernel == -1);
+
+            if (countNonZero(k1) <= 0)
+                e1 = Mat(src.size(), src.type(), Scalar(255));
+            else
+                stMorph::erode(src, e1, k1, anchor, iterations, borderType, borderValue);
+
+            if (countNonZero(k2) <= 0)
+                e2 = Mat(src.size(), src.type(), Scalar(255));
+            else
+            {
+                Mat src_complement;
+                bitwise_not(src, src_complement);
+                stMorph::erode(src_complement, e2, k2, anchor, iterations, borderType, borderValue);
+            }
+            dst = e1 & e2;
+        }
+        break;
+    default:
+        CV_Error(cv::Error::StsBadArg, "unknown morphological operation");
+    }
 }
 
 }} // cv::st::
