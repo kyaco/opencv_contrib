@@ -195,6 +195,67 @@ Mat knAsymm (){
     return (Mat_<uchar>(5, 5) << 0,0,0,0,0, 0,0,1,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,1,0,0);
 }
 
+#pragma region dilasion
+
+/*
+* dilate regression tests.
+*/
+void dilate_rgr(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
+    int iterations = 1,
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+{
+    Mat expected, actual;
+    dilate(src, expected, kernel, anchor, iterations, bdrType, bdrVal);
+    stMorph::dilate(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
+    assertArraysIdentical(expected, actual);
+}
+TEST(ximgproc_StMorph_dilate, regression_8UC1) { dilate_rgr(im(CV_8UC1), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_8UC3) { dilate_rgr(im(CV_8UC3), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_16UC1) { dilate_rgr(im(CV_16UC1), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_16UC3) { dilate_rgr(im(CV_16UC3), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_16SC1) { dilate_rgr(im(CV_16SC1), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_16SC3) { dilate_rgr(im(CV_16SC3), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_32FC1) { dilate_rgr(im(CV_32FC1), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_32FC3) { dilate_rgr(im(CV_32FC3), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_64FC1) { dilate_rgr(im(CV_64FC1), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_64FC3) { dilate_rgr(im(CV_64FC3), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_kn5) { dilate_rgr(im(CV_8UC3), kn5()); }
+TEST(ximgproc_StMorph_dilate, regression_kn4) { dilate_rgr(im(CV_8UC3), kn4()); }
+TEST(ximgproc_StMorph_dilate, wtf_regression_kn1Zero) { dilate_rgr(im(CV_8UC3), kn1Zero()); }
+TEST(ximgproc_StMorph_dilate, regression_kn1One) { dilate_rgr(im(CV_8UC3), kn1One()); }
+TEST(ximgproc_StMorph_dilate, wtf_regression_knEmpty) { dilate_rgr(im(CV_8UC3), knEmpty()); }
+TEST(ximgproc_StMorph_dilate, wtf_regression_knZeros) { dilate_rgr(im(CV_8UC3), knZeros()); }
+TEST(ximgproc_StMorph_dilate, regression_knOnes) { dilate_rgr(im(CV_8UC3), knOnes()); }
+TEST(ximgproc_StMorph_dilate, regression_knBig) { dilate_rgr(im(CV_8UC3), knBig()); }
+TEST(ximgproc_StMorph_dilate, regression_knAsymm) { dilate_rgr(im(CV_8UC3), knAsymm()); }
+TEST(ximgproc_StMorph_dilate, regression_ancMid) { dilate_rgr(im(CV_8UC3), kn5(), Point(-1, -1)); }
+TEST(ximgproc_StMorph_dilate, regression_ancEdge1) { dilate_rgr(im(CV_8UC3), kn5(), Point(0, 0)); }
+TEST(ximgproc_StMorph_dilate, regression_ancEdge2) { dilate_rgr(im(CV_8UC3), kn5(), Point(4, 4)); }
+TEST(ximgproc_StMorph_dilate, wtf_regression_it0) { dilate_rgr(im(CV_8UC3), kn5(), Point(-1, -1), 0); }
+TEST(ximgproc_StMorph_dilate, regression_it1) { dilate_rgr(im(CV_8UC3), kn5(), Point(-1, -1), 1); }
+TEST(ximgproc_StMorph_dilate, regression_it2) { dilate_rgr(im(CV_8UC3), kn5(), Point(-1, -1), 2); }
+/*
+* dilate feature tests.
+*/
+void dilate_ftr(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
+    int iterations = 1,
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+{
+    Mat expected, actual;
+    stMorph::dilate(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
+    // todo: generate expected result.
+    // assertArraysIdentical(expected, actual);
+}
+/* CV_8S, CV_16F are not supported by morph.simd::getMorphologyFilter */
+TEST(ximgproc_StMorph_dilate, feature_8SC1) { dilate_ftr(im(CV_8SC1), kn5()); }
+TEST(ximgproc_StMorph_dilate, feature_8SC3) { dilate_ftr(im(CV_8SC3), kn5()); }
+TEST(ximgproc_StMorph_dilate, feature_32SC1) { dilate_ftr(im(CV_32SC1), kn5()); }
+TEST(ximgproc_StMorph_dilate, feature_32SC3) { dilate_ftr(im(CV_32SC3), kn5()); }
+
+#pragma endregion
+
+#pragma region erosion
+
 /*
 * erode regression tests.
 */
@@ -250,20 +311,9 @@ TEST(ximgproc_StMorph_erode, feature_8SC3) { erode_ftr(im(CV_8SC3), kn5()); }
 TEST(ximgproc_StMorph_erode, feature_32SC1) { erode_ftr(im(CV_32SC1), kn5()); }
 TEST(ximgproc_StMorph_erode, feature_32SC3) { erode_ftr(im(CV_32SC3), kn5()); }
 
-/*
-* dilate regression tests.
-*/
-void dilate_rgr(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
-    int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
-{
-    Mat expected, actual;
-    dilate(src, expected, kernel, anchor, iterations, bdrType, bdrVal);
-    stMorph::dilate(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
-    assertArraysIdentical(expected, actual);
-}
-TEST(ximgproc_StMorph_dilate, regression_8UC3) { dilate_rgr(im(CV_8UC3), kn5()); }
-TEST(ximgproc_StMorph_dilate, regression_8UC1) { dilate_rgr(im(CV_8UC1), kn5()); }
+#pragma endregion
+
+#pragma region morphologyEx
 
 /*
 * morphologyEx regression tests.
@@ -285,5 +335,7 @@ TEST(ximgproc_StMorph_ex, regression_gradient) { ex_rgr(im(CV_8UC3), MORPH_GRADI
 TEST(ximgproc_StMorph_ex, regression_tophat) { ex_rgr(im(CV_8UC3), MORPH_TOPHAT, kn5()); }
 TEST(ximgproc_StMorph_ex, regression_blackhat) { ex_rgr(im(CV_8UC3), MORPH_BLACKHAT, kn5()); }
 TEST(ximgproc_StMorph_ex, regression_hitmiss) { ex_rgr(im(CV_8UC3), MORPH_HITMISS, kn5()); }
+
+#pragma endregion
 
 }} // ::opencv_test::
