@@ -156,10 +156,8 @@ TEST(develop, PLANNING)
     destroyAllWindows();
 }
 
+#pragma region Common test methods
 
-/*
-* Common methods during tests.
-*/
 void assertArraysIdentical(InputArray ary1, InputArray ary2)
 {
     Mat xor = ary1.getMat() ^ ary2.getMat();
@@ -194,6 +192,8 @@ Mat knBig() { return getStructuringElement(cv::MorphShapes::MORPH_RECT, Size(201
 Mat knAsymm (){
     return (Mat_<uchar>(5, 5) << 0,0,0,0,0, 0,0,1,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,1,0,0);
 }
+
+#pragma endregion
 
 #pragma region dilasion
 

@@ -180,7 +180,7 @@ std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> sparseM
     return plan;
 }
 
-#pragma region Dilation
+#pragma region dilate
 
 template <typename T>
 void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
@@ -361,9 +361,9 @@ void dilate(InputArray _src, OutputArray _dst, InputArray _kernel,
     }
 }
 
-#pragma endregion
+#pragma endregion dilate
 
-#pragma region Erosion
+#pragma region erode
 
 template <typename T>
 void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
@@ -544,7 +544,9 @@ void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
     }
 }
 
-#pragma endregion
+#pragma endregion erode
+
+#pragma region morphologyEx
 
 void morphologyEx(InputArray _src, OutputArray _dst, int op,
     InputArray _kernel, Point anchor, int iterations,
@@ -631,5 +633,7 @@ void morphologyEx(InputArray _src, OutputArray _dst, int op,
         CV_Error(cv::Error::StsBadArg, "unknown morphological operation");
     }
 }
+
+#pragma endregion morphologyEx
 
 }} // cv::st::
