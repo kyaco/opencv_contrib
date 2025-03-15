@@ -343,7 +343,7 @@ void cvDilate(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
 {
     Mat actual;
-    erode(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
+    dilate(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
 }
 void cvErode(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
@@ -359,7 +359,7 @@ TEST(ximgproc_StMorph_dev, big_stDilate)
 }
 TEST(ximgproc_StMorph_dev, big_stEerode)
 {
-    dilate_ftr(im(CV_8UC3), kn51());
+    erode_ftr(im(CV_8UC3), kn51());
 }
 TEST(ximgproc_StMorph_dev, big_cvDilate)
 {
