@@ -5,7 +5,7 @@
 #include "precomp.hpp"
 #include <limits>
 #include <vector>
-#include <algorithm>
+#include <utility>
 
 namespace cv {
 namespace stMorph {
@@ -104,7 +104,6 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> sparseMatMap)
 {
 /*
-*
 *
 * AtCoder: https://atcoder.jp/contests/ahc037/tasks/ahc037_a
 *

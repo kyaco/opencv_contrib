@@ -4,6 +4,7 @@
 
 #include "test_precomp.hpp"
 #include "opencv2/ximgproc/sparse_table_morphology.hpp"
+#include <vector>
 
 namespace opencv_test {
 namespace {
@@ -232,7 +233,7 @@ TEST(ximgproc_StMorph_dev, compare_with_original_erode)
     Mat diff;
     cv::absdiff(expected, actual, diff);
 
-#if 1
+#if 0
     putText(expected, std::to_string(originalTime), cv::Point(10, 20), HersheyFonts::FONT_HERSHEY_TRIPLEX, 1, Scalar(250, 40, 40), 1, LineTypes::FILLED);
     putText(actual, std::to_string(proposalTime), cv::Point(10, 20), HersheyFonts::FONT_HERSHEY_TRIPLEX, 1, Scalar(250, 40, 40), 1, LineTypes::FILLED);
     Mat con;
@@ -289,7 +290,7 @@ TEST(ximgproc_StMorph_dev, POW2RECT_COVERING)
         cv::line(kernel, rb, rt, color[i % 20], 2);
         cv::line(kernel, rt, lt, color[i % 20], 2);
     }
-    imshow("kernel", kernel);
+    //imshow("kernel", kernel);
 
     waitKey();
     destroyAllWindows();
@@ -332,7 +333,7 @@ TEST(ximgproc_StMorph_dev, PLANNING)
             cv::line(m, Point(edge.dimCol * g + g / 2, edge.dimRow * g + g / 2), Point((edge.dimCol + 1) * g + g / 2, edge.dimRow * g + g / 2), Scalar(100, 100, 100), 2);
         }
     }
-    imshow("Map", m);
+//    imshow("Map", m);
 
     waitKey();
     destroyAllWindows();
