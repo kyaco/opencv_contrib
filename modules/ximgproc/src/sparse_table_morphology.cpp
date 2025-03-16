@@ -4,12 +4,14 @@
 
 #include "precomp.hpp"
 #include <limits>
-#include <utility>
 #include <vector>
+#include <algorithm>
 
 namespace cv {
 namespace stMorph {
 
+// Generate list of rectangles whose width and height are power of 2.
+// (The width and height values of returned rects ​​are the log2 of the actual values.)
 std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 {
     CV_Assert(_kernel.type() == CV_8UC1);
@@ -180,57 +182,15 @@ std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> sparseM
     return plan;
 }
 
-#pragma region dilate
-
 template <typename T>
-void makeMaxSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
-{
-    CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
-
-    dst.create(src.size(), src.type());
-    Mat src_ = src.getMat();
-    Mat dst_ = dst.getMat();
-    int rowLim = src.rows() - rowStep;
-    int colChLim = (src.cols() - colStep) * src.channels();
-    int borderSkipStep = colStep * src.channels();
-
-    T* srcPtr1 = src_.ptr<T>(0, 0);
-    T* srcPtr2 = src_.ptr<T>(rowStep, colStep);
-    T* dstPtr = dst_.ptr<T>(0, 0);
-    for (int row = 0; row < rowLim; row++)
-    {
-        for (int colCh = 0; colCh < colChLim; colCh++)
-        {
-            // Somehow std::max(a,b) or a>b?a:b are slower.
-            if (*srcPtr1 > *srcPtr2)
-            {
-                *dstPtr++ = *srcPtr1++;
-                srcPtr2++;
-            }
-            else
-            {
-                *dstPtr++ = *srcPtr2++;
-                srcPtr1++;
-            }
-        }
-        srcPtr1 += borderSkipStep;
-        srcPtr2 += borderSkipStep;
-        dstPtr += borderSkipStep;
-    }
-}
-
-template <typename T>
-void _dilate(InputArray _src, OutputArray _dst, InputArray _kernel,
+void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
     Point anchor, int iterations,
-    int borderType, const Scalar& borderValue)
+    int borderType, const Scalar& borderVal)
 {
-    Mat kernel = _kernel.getMat();
-
-    // Generate list of rectangles whose width and height are power of 2.
-    // (The width and height values of returned rects ​​are the log2 of the actual values.)
+    T nil = (minmax == Op::Min) ? std::numeric_limits<T>::max() : std::numeric_limits<T>::min();
     std::vector<Rect> pow2Rects = genPow2RectsToCoverKernel(kernel);
 
-    // get the depth limits
+    // get the depth limits;
     int rowDepthLim = 0, colDepthLim = 0;
     for (int i = 0; i < pow2Rects.size(); i++)
     {
@@ -249,70 +209,69 @@ void _dilate(InputArray _src, OutputArray _dst, InputArray _kernel,
     std::vector<StStep> stPlan = planSparseTableConstr(sparseMatMap);
 
     Mat src = _src.getMat();
+    _dst.create(_src.size(), _src.type());
+    Mat dst = _dst.getMat();
+
+    // adding border to the source.
+    Scalar bV = borderVal;
+    if (borderType == BorderTypes::BORDER_CONSTANT && borderVal == morphologyDefaultBorderValue())
+        bV = Scalar::all(nil);
 
     do
     {
-        // adding border to the source.
-        Scalar bV = borderValue;
-        if (borderType == BorderTypes::BORDER_CONSTANT
-            && borderValue == morphologyDefaultBorderValue())
-            bV = Scalar::all(0);
-        Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
+        Mat expandedSrc;
         copyMakeBorder(src, expandedSrc,
-            anchor.y, kernel.cols - 1 - anchor.y,
-            anchor.x, kernel.rows - 1 - anchor.x,
+            anchor.y, kernel.cols() - 1 - anchor.y,
+            anchor.x, kernel.rows() - 1 - anchor.x,
             borderType, bV);
 
-        _dst.create(_src.size(), _src.type());
-        Mat dst = _dst.getMat();
+        dst.setTo(nil);
 
+        // TODO: keep only needed memories.
         std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
         st[0][0] = expandedSrc;
         for (int i = 0; i < stPlan.size(); i++)
         {
             StStep step = stPlan[i];
-            switch (step.ax)
+            Mat& curr = st[step.dimRow][step.dimCol];
+            Mat* dst1;
+            int ofsX = 0, ofsY = 0;
+            if (step.ax == Dim::Col)
             {
-            case Dim::Col:
-                makeMaxSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1],
-                    0, 1 << step.dimCol);
-                break;
-            case Dim::Row:
-                makeMaxSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol],
-                    1 << step.dimRow, 0);
-                break;
+                ofsX = 1 << step.dimCol;
+                dst1 = &st[step.dimRow][step.dimCol + 1];
             }
+            else
+            {
+                ofsY = 1 << step.dimRow;
+                dst1 = &st[step.dimRow + 1][step.dimCol];
+            }
+            int width = curr.cols - ofsX;
+            int height = curr.rows - ofsY;
+            Mat& src1 = st[step.dimRow][step.dimCol](Rect(0, 0, width, height));
+            Mat& src2 = st[step.dimRow][step.dimCol](Rect(ofsX, ofsY, width, height));
+            dst1->create(height, width, curr.type());
+            if (minmax == Op::Min) cv::min(src1, src2, *dst1);
+            else cv::max(src1, src2, *dst1);
         }
 
         // result constructioin
-        dst.setTo(0);
-        int colChLim = dst.cols * dst.channels();
         for (int i = 0; i < pow2Rects.size(); i++)
         {
             Rect rect = pow2Rects[i];
-            Mat sparseMat = st[rect.height][rect.width];
-            int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.channels();
-            T* srcPtr = sparseMat.ptr<T>(rect.y, rect.x);
-            T* dstPtr = dst.ptr<T>();
-            for (int row = 0; row < dst.rows; row++)
-            {
-                for (int col = 0; col < colChLim; col++)
-                {
-                    if (*srcPtr > *dstPtr) *dstPtr = *srcPtr;
-                    srcPtr++;
-                    dstPtr++;
-                }
-                srcPtr += sideBorderSkipStep;
-            }
+            Rect srcRect = Rect(rect.x, rect.y, dst.cols, dst.rows);
+            Mat& next = st[rect.height][rect.width](srcRect);
+            if (minmax == Op::Min) cv::min(dst, next, dst);
+            else cv::max(dst, next, dst);
         }
 
         src = dst;
     } while (--iterations > 0);
 }
 
-void dilate(InputArray _src, OutputArray _dst, InputArray _kernel,
+void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray _kernel,
     Point anchor, int iterations,
-    int borderType, const Scalar& borderValue)
+    int borderType, const Scalar& borderVal)
 {
     Mat kernel = _kernel.getMat();
     if (iterations == 0 || kernel.rows * kernel.cols == 1)
@@ -334,306 +293,130 @@ void dilate(InputArray _src, OutputArray _dst, InputArray _kernel,
     // Fix anchor to the center of the kernel.
     anchor = stMorph::normalizeAnchor(anchor, kernel.size());
 
-    // dilate operation
     switch (_src.depth())
     {
     case CV_8U:
-        _dilate<uchar>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
+        morphOp<uchar>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
         return;
     case CV_8S:
-        _dilate<char>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
+        morphOp<char>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
         return;
     case CV_16U:
-        _dilate<ushort>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
+        morphOp<ushort>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
         return;
     case CV_16S:
-        _dilate<short>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
+        morphOp<short>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
         return;
     case CV_32S:
-        _dilate<int>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
+        morphOp<int>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
         return;
     case CV_32F:
-        _dilate<float>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
+        morphOp<float>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
         return;
     case CV_64F:
-        _dilate<double>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
+        morphOp<double>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
         return;
     }
 }
 
-#pragma endregion dilate
-
-#pragma region erode
-
-template <typename T>
-void makeMinSparseTableMat(InputArray src, OutputArray dst, int rowStep, int colStep)
-{
-    CV_Assert(rowStep * colStep == 0); // one of "rowStep" or "colStep" is required to be 0.
-
-    dst.create(src.size(), src.type());
-    Mat src_ = src.getMat();
-    Mat dst_ = dst.getMat();
-    int rowLim = src.rows() - rowStep;
-    int colChLim = (src.cols() - colStep) * src.channels();
-    int borderSkipStep = colStep * src.channels();
-
-    T* srcPtr1 = src_.ptr<T>(0, 0);
-    T* srcPtr2 = src_.ptr<T>(rowStep, colStep);
-    T* dstPtr = dst_.ptr<T>(0, 0);
-    for (int row = 0; row < rowLim; row++)
-    {
-        for (int colCh = 0; colCh < colChLim; colCh++)
-        {
-            // Somehow std::min(a,b) or a<b?a:b are slower.
-            if (*srcPtr1 < *srcPtr2)
-            {
-                *dstPtr++ = *srcPtr1++;
-                srcPtr2++;
-            }
-            else
-            {
-                *dstPtr++ = *srcPtr2++;
-                srcPtr1++;
-            }
-        }
-        srcPtr1 += borderSkipStep;
-        srcPtr2 += borderSkipStep;
-        dstPtr += borderSkipStep;
-    }
-}
-
-template <typename T>
-void _erode(InputArray _src, OutputArray _dst, InputArray _kernel,
+void dilate(InputArray src, OutputArray dst, InputArray kernel,
     Point anchor, int iterations,
-    int borderType, const Scalar& borderValue)
+    int borderType, const Scalar& borderVal)
 {
-    Mat kernel = _kernel.getMat();
-
-    // Generate list of rectangles whose width and height are power of 2.
-    // (The width and height values of returned rects ​​are the log2 of the actual values.)
-    std::vector<Rect> pow2Rects = genPow2RectsToCoverKernel(kernel);
-
-    // get the depth limits
-    int rowDepthLim = 0, colDepthLim = 0;
-    for (int i = 0; i < pow2Rects.size(); i++)
-    {
-        if (rowDepthLim < pow2Rects[i].height) rowDepthLim = pow2Rects[i].height;
-        if (colDepthLim < pow2Rects[i].width) colDepthLim = pow2Rects[i].width;
-    }
-    rowDepthLim++;
-    colDepthLim++;
-
-    // list up required sparse table nodes.
-    std::vector<std::vector<bool>> sparseMatMap(rowDepthLim, std::vector<bool>(colDepthLim, false));
-    for (int i = 0; i < pow2Rects.size(); i++)
-        sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
-
-    // plan how to calculate required nodes of 2D sparse table.
-    std::vector<StStep> stPlan = planSparseTableConstr(sparseMatMap);
-
-    Mat src = _src.getMat();
-
-    do
-    {
-        // adding border to the source.
-        Scalar bV = borderValue;
-        if (borderType == BorderTypes::BORDER_CONSTANT
-            && borderValue == morphologyDefaultBorderValue())
-            bV = Scalar::all(std::numeric_limits<T>::max());
-        Mat expandedSrc(src.rows + kernel.rows, src.cols + kernel.cols, src.type());
-        copyMakeBorder(src, expandedSrc,
-            anchor.y, kernel.cols - 1 - anchor.y,
-            anchor.x, kernel.rows - 1 - anchor.x,
-            borderType, bV);
-
-        _dst.create(_src.size(), _src.type());
-        Mat dst = _dst.getMat();
-
-        std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
-        st[0][0] = expandedSrc;
-        for (int i = 0; i < stPlan.size(); i++)
-        {
-            StStep step = stPlan[i];
-            switch (step.ax)
-            {
-            case Dim::Col:
-                makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow][step.dimCol + 1],
-                    0, 1 << step.dimCol);
-                break;
-            case Dim::Row:
-                makeMinSparseTableMat<T>(st[step.dimRow][step.dimCol], st[step.dimRow + 1][step.dimCol],
-                    1 << step.dimRow, 0);
-                break;
-            }
-        }
-
-        // result constructioin
-        dst.setTo(std::numeric_limits<T>::max());
-        int colChLim = dst.cols * dst.channels();
-        for (int i = 0; i < pow2Rects.size(); i++)
-        {
-            Rect rect = pow2Rects[i];
-            Mat sparseMat = st[rect.height][rect.width];
-            int sideBorderSkipStep = (kernel.cols - 1) * sparseMat.channels();
-            T* srcPtr = sparseMat.ptr<T>(rect.y, rect.x);
-            T* dstPtr = dst.ptr<T>();
-            for (int row = 0; row < dst.rows; row++)
-            {
-                for (int col = 0; col < colChLim; col++)
-                {
-                    if (*srcPtr < *dstPtr) *dstPtr = *srcPtr;
-                    srcPtr++;
-                    dstPtr++;
-                }
-                srcPtr += sideBorderSkipStep;
-            }
-        }
-
-        src = dst;
-    } while (--iterations > 0);
+    morphOp(Op::Max, src, dst, kernel, anchor, iterations, borderType, borderVal);
 }
 
-void erode(InputArray _src, OutputArray _dst, InputArray _kernel,
+void erode(InputArray src, OutputArray dst, InputArray kernel,
     Point anchor, int iterations,
-    int borderType, const Scalar& borderValue)
+    int borderType, const Scalar& borderVal)
 {
-    Mat kernel = _kernel.getMat();
-    if (iterations == 0 || kernel.rows * kernel.cols == 1)
-    {
-        _src.copyTo(_dst);
-        return;
-    }
-    // Fix kernel in case of it is empty.
-    if (kernel.empty())
-    {
-        kernel = getStructuringElement(MORPH_RECT, Size(1 + iterations * 2, 1 + iterations * 2));
-        anchor = Point(iterations, iterations);
-        iterations = 1;
-    }
-    if (countNonZero(kernel) == 0)
-    {
-        kernel.at<uchar>(0, 0) = 1;
-    }
-    // Fix anchor to the center of the kernel.
-    anchor = stMorph::normalizeAnchor(anchor, kernel.size());
-
-    // erode operation
-    switch (_src.depth())
-    {
-    case CV_8U:
-        _erode<uchar>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
-        return;
-    case CV_8S:
-        _erode<char>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
-        return;
-    case CV_16U:
-        _erode<ushort>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
-        return;
-    case CV_16S:
-        _erode<short>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
-        return;
-    case CV_32S:
-        _erode<int>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
-        return;
-    case CV_32F:
-        _erode<float>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
-        return;
-    case CV_64F:
-        _erode<double>(_src, _dst, kernel, anchor, iterations, borderType, borderValue);
-        return;
-    }
+    morphOp(Op::Min, src, dst, kernel, anchor, iterations, borderType, borderVal);
 }
 
-#pragma endregion erode
-
-#pragma region morphologyEx
-
-void morphologyEx(InputArray _src, OutputArray _dst, int op,
-    InputArray _kernel, Point anchor, int iterations,
-    int borderType, const Scalar& borderValue)
+void morphologyEx(InputArray src, OutputArray dst, int op,
+    InputArray kernel, Point anchor, int iterations,
+    int borderType, const Scalar& borderVal)
 {
     CV_INSTRUMENT_REGION();
 
-    CV_Assert(!_src.empty());
+    CV_Assert(!src.empty());
 
-    Mat kernel = _kernel.getMat();
-    if (kernel.empty())
+    Mat _kernel = kernel.getMat();
+    if (_kernel.empty())
     {
-        kernel = getStructuringElement(MORPH_RECT, Size(3, 3), Point(1, 1));
+        _kernel = getStructuringElement(MORPH_RECT, Size(3, 3), Point(1, 1));
     }
 
-    Mat src = _src.getMat(), temp;
-    _dst.create(src.size(), src.type());
-    Mat dst = _dst.getMat();
+    Mat _src = src.getMat(), temp;
+    dst.create(_src.size(), _src.type());
+    Mat _dst = dst.getMat();
 
     switch (op)
     {
     case MORPH_ERODE:
-        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::erode(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_DILATE:
-        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::dilate(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_OPEN:
-        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderValue);
-        stMorph::dilate(dst, dst, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::erode(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(_dst, _dst, _kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_CLOSE:
-        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderValue);
-        stMorph::erode(dst, dst, kernel, anchor, iterations, borderType, borderValue);
+        stMorph::dilate(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(_dst, _dst, _kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_GRADIENT:
-        stMorph::erode(src, temp, kernel, anchor, iterations, borderType, borderValue);
-        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderValue);
-        dst -= temp;
+        stMorph::erode(_src, temp, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        _dst -= temp;
         break;
     case MORPH_TOPHAT:
-        if (src.data != dst.data)
-            temp = dst;
-        stMorph::erode(src, temp, kernel, anchor, iterations, borderType, borderValue);
-        stMorph::dilate(temp, temp, kernel, anchor, iterations, borderType, borderValue);
-        dst = src - temp;
+        if (_src.data != _dst.data)
+            temp = _dst;
+        stMorph::erode(_src, temp, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(temp, temp, _kernel, anchor, iterations, borderType, borderVal);
+        _dst = _src - temp;
         break;
     case MORPH_BLACKHAT:
-        if (src.data != dst.data)
-            temp = dst;
-        stMorph::dilate(src, temp, kernel, anchor, iterations, borderType, borderValue);
-        stMorph::erode(temp, temp, kernel, anchor, iterations, borderType, borderValue);
-        dst = temp - src;
+        if (_src.data != _dst.data)
+            temp = _dst;
+        stMorph::dilate(_src, temp, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(temp, temp, _kernel, anchor, iterations, borderType, borderVal);
+        _dst = temp - _src;
         break;
     case MORPH_HITMISS:
-        CV_Assert(src.type() == CV_8UC1);
-        if (countNonZero(kernel) <= 0)
+        CV_Assert(_src.type() == CV_8UC1);
+        if (countNonZero(_kernel) <= 0)
         {
-            src.copyTo(dst);
+            _src.copyTo(_dst);
             break;
         }
         {
             Mat k1, k2, e1, e2;
-            k1 = (kernel == 1);
-            k2 = (kernel == -1);
+            k1 = (_kernel == 1);
+            k2 = (_kernel == -1);
 
             if (countNonZero(k1) <= 0)
-                e1 = Mat(src.size(), src.type(), Scalar(255));
+                e1 = Mat(_src.size(), _src.type(), Scalar(255));
             else
-                stMorph::erode(src, e1, k1, anchor, iterations, borderType, borderValue);
+                stMorph::erode(_src, e1, k1, anchor, iterations, borderType, borderVal);
 
             if (countNonZero(k2) <= 0)
-                e2 = Mat(src.size(), src.type(), Scalar(255));
+                e2 = Mat(_src.size(), _src.type(), Scalar(255));
             else
             {
-                Mat src_complement;
-                bitwise_not(src, src_complement);
-                stMorph::erode(src_complement, e2, k2, anchor, iterations, borderType, borderValue);
+                Mat _src_complement;
+                bitwise_not(_src, _src_complement);
+                stMorph::erode(_src_complement, e2, k2, anchor, iterations, borderType, borderVal);
             }
-            dst = e1 & e2;
+            _dst = e1 & e2;
         }
         break;
     default:
         CV_Error(cv::Error::StsBadArg, "unknown morphological operation");
     }
 }
-
-#pragma endregion morphologyEx
 
 }} // cv::st::

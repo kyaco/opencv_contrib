@@ -100,6 +100,11 @@ enum Dim
     Col, Row
 };
 
+enum Op
+{
+    Min, Max
+};
+
 struct StStep
 {
     StStep(int dimR, int dimC, Dim _ax)
