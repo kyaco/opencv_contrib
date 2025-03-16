@@ -28,54 +28,33 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
     st[0][0] = kernel;
     for (int colDepth = 1; colDepth <= log2[kernel.cols]; colDepth++)
     {
-        int rowStep = 0;
-        int rowSkip = 0;
-        int rowLim = kernel.rows - rowSkip;
-
         int colStep = 1 << (colDepth - 1);
-        int colSkip = (1 << colDepth) - 1;
-        int colLim = kernel.cols - colSkip;
+        int colLim = kernel.cols - (1 << colDepth) + 1;
 
+        Rect rect1(0, 0, colLim, kernel.rows);
+        Rect rect2(colStep, 0, colLim, kernel.rows);
+        Mat src1 = st[0][colDepth - 1](rect1);
+        Mat src2 = st[0][colDepth - 1](rect2);
         st[0][colDepth].create(kernel.size(), kernel.type());
-        uchar* ptr1 = st[0][colDepth - 1].ptr();
-        uchar* ptr2 = st[0][colDepth - 1].ptr(rowStep, colStep);
-        uchar* dst = st[0][colDepth].ptr();
-        for (int row = 0; row < rowLim; row++)
-        {
-            for (int col = 0; col < colLim; col++)
-            {
-                *dst++ = *ptr1++ & *ptr2++;
-            }
-            ptr1 += colSkip;
-            ptr2 += colSkip;
-            dst += colSkip;
-        }
+        Mat next = st[0][colDepth](rect1);
+        cv::bitwise_and(src1, src2, next);
     }
     for (int rowDepth = 1; rowDepth <= log2[kernel.rows]; rowDepth++)
     {
         int rowStep = 1 << (rowDepth - 1);
-        int rowSkip = (1 << rowDepth) - 1;
-        int rowLim = kernel.rows - rowSkip;
+        int rowLim = kernel.rows - (1 << rowDepth) + 1;
         for (int colDepth = 0; colDepth <= log2[kernel.cols]; colDepth++)
         {
             int colStep = 0;
-            int colSkip = (1 << colDepth) - 1;
-            int colLim = kernel.cols - colSkip;
+            int colLim = kernel.cols - (1 << colDepth) + 1;
 
+            Rect rect1(0, 0, colLim, rowLim);
+            Rect rect2(colStep, rowStep, colLim, rowLim);
+            Mat src1 = st[rowDepth - 1][colDepth](rect1);
+            Mat src2 = st[rowDepth - 1][colDepth](rect2);
             st[rowDepth][colDepth].create(kernel.size(), kernel.type());
-            uchar* ptr1 = st[rowDepth - 1][colDepth].ptr();
-            uchar* ptr2 = st[rowDepth - 1][colDepth].ptr(rowStep, colStep);
-            uchar* dst = st[rowDepth][colDepth].ptr();
-            for (int row = 0; row < rowLim; row++)
-            {
-                for (int col = 0; col < colLim; col++)
-                {
-                    *dst++ = *ptr1++ & *ptr2++;
-                }
-                ptr1 += colSkip;
-                ptr2 += colSkip;
-                dst += colSkip;
-            }
+            Mat next = st[rowDepth][colDepth](rect1);
+            cv::bitwise_and(src1, src2, next);
         }
     }
 
@@ -107,7 +86,7 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
                     if (row > 0 && ptr[-kernel.cols]
                         && row < rowLim && ptr[kernel.cols] == 1) continue;
 
-                    // ignore one of neighbor block is white; will be alive in deeper table
+                    // ignore if neighboring block is white; will be alive in deeper table
                     if (col + colOfst <= colLim && ptr[colOfst] == 1) continue;
                     if (col - colOfst >= 0 && ptr[-colOfst] == 1) continue;
                     if (row + rowOfst <= rowLim && ptr[x] == 1) continue;
@@ -119,7 +98,6 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
             }
         }
     }
-
     return p2Rects;
 }
 
@@ -354,18 +332,18 @@ void morphologyEx(InputArray src, OutputArray dst, int op,
     switch (op)
     {
     case MORPH_ERODE:
-        stMorph::erode(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_DILATE:
-        stMorph::dilate(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_OPEN:
-        stMorph::erode(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
-        stMorph::dilate(_dst, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(dst, dst, kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_CLOSE:
-        stMorph::dilate(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
-        stMorph::erode(_dst, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(dst, dst, kernel, anchor, iterations, borderType, borderVal);
         break;
     case MORPH_GRADIENT:
         stMorph::erode(_src, temp, _kernel, anchor, iterations, borderType, borderVal);
