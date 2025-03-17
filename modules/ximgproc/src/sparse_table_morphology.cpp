@@ -87,9 +87,9 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
                         && row < rowLim && ptr[kernel.cols] == 1) continue;
 
                     // ignore if neighboring block is white; will be alive in deeper table
-                    if (col + colOfst <= colLim && ptr[colOfst] == 1) continue;
+                    if (col + colOfst < colLim && ptr[colOfst] == 1) continue;
                     if (col - colOfst >= 0 && ptr[-colOfst] == 1) continue;
-                    if (row + rowOfst <= rowLim && ptr[x] == 1) continue;
+                    if (row + rowOfst < rowLim && ptr[x] == 1) continue;
                     if (row - rowOfst >= 0 && ptr[-x] == 1) continue;
 
                     p2Rects.emplace_back(col, row, colDepth, rowDepth);

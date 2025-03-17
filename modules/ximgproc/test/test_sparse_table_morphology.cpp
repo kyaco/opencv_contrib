@@ -45,6 +45,12 @@ Mat knBig() { return getStructuringElement(cv::MorphShapes::MORPH_RECT, Size(201
 Mat knAsymm (){
     return (Mat_<uchar>(5, 5) << 0,0,0,0,0, 0,0,1,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,1,0,0);
 }
+Mat knRnd(int size)
+{
+    Mat rndMat(size, size, CV_8UC1);
+    randu(rndMat, 0, 2);
+    return rndMat;
+}
 
 #pragma endregion
 
@@ -188,6 +194,24 @@ TEST(ximgproc_StMorph_ex, regression_gradient) { ex_rgr(im(CV_8UC3), MORPH_GRADI
 TEST(ximgproc_StMorph_ex, regression_tophat) { ex_rgr(im(CV_8UC3), MORPH_TOPHAT, kn5()); }
 TEST(ximgproc_StMorph_ex, regression_blackhat) { ex_rgr(im(CV_8UC3), MORPH_BLACKHAT, kn5()); }
 TEST(ximgproc_StMorph_ex, regression_hitmiss) { ex_rgr(im(CV_8UC1), MORPH_HITMISS, kn5()); }
+
+#pragma endregion
+
+#pragma region power2RectCovering
+
+void p2RCov(InputArray kernel)
+{
+    std::vector<Rect> p2Rects = stMorph::genPow2RectsToCoverKernel(kernel);
+    Mat expected = kernel.getMat();
+    Mat actual = Mat::zeros(kernel.size(), kernel.type());
+    for (Rect p2Rect: p2Rects)
+    {
+        Rect rect(p2Rect.x, p2Rect.y, 1 << p2Rect.width, 1 << p2Rect.height);
+        actual(rect).setTo(1);
+    }
+    assertArraysIdentical(expected, actual);
+}
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd) { p2RCov(knRnd(100)); }
 
 #pragma endregion
 
