@@ -26,7 +26,9 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
     // generate sparse table for the kernel
     std::vector<std::vector<Mat>> st(log2[kernel.rows] + 1, std::vector<Mat>(log2[kernel.cols] + 1));
     st[0][0] = kernel;
-    for (int colDepth = 1; colDepth <= log2[kernel.cols]; colDepth++)
+    int colDepthLim = log2[kernel.cols];
+    int rowDepthLim = log2[kernel.rows];
+    for (int colDepth = 1; colDepth <= colDepthLim; colDepth++)
     {
         int colStep = 1 << (colDepth - 1);
         int colLim = kernel.cols - (1 << colDepth) + 1;
@@ -38,12 +40,19 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
         st[0][colDepth].create(kernel.size(), kernel.type());
         Mat next = st[0][colDepth](rect1);
         cv::bitwise_and(src1, src2, next);
+        if (countNonZero(next) == 0)
+        {
+            colDepthLim = colDepth;
+            break;
+        }
     }
-    for (int rowDepth = 1; rowDepth <= log2[kernel.rows]; rowDepth++)
+    for (int rowDepth = 1; rowDepth <= rowDepthLim; rowDepth++)
     {
+        int nonZero = 0;
+
         int rowStep = 1 << (rowDepth - 1);
         int rowLim = kernel.rows - (1 << rowDepth) + 1;
-        for (int colDepth = 0; colDepth <= log2[kernel.cols]; colDepth++)
+        for (int colDepth = 0; colDepth <= colDepthLim; colDepth++)
         {
             int colStep = 0;
             int colLim = kernel.cols - (1 << colDepth) + 1;
@@ -55,18 +64,28 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
             st[rowDepth][colDepth].create(kernel.size(), kernel.type());
             Mat next = st[rowDepth][colDepth](rect1);
             cv::bitwise_and(src1, src2, next);
+
+            if (colDepth == 0)
+            {
+                nonZero = countNonZero(next);
+            }
+        }
+        if (nonZero == 0)
+        {
+            rowDepthLim = rowDepth;
+            break;
         }
     }
 
     // find pow2 rectangles
     std::vector<Rect> p2Rects;
-    for (int rowDepth = 0; rowDepth <= log2[kernel.rows]; rowDepth++)
+    for (int rowDepth = 0; rowDepth <= rowDepthLim; rowDepth++)
     {
         int rowOfst = 1 << rowDepth;
         int rowSkip = rowOfst - 1;
         int rowLim = kernel.rows - rowSkip;
         int x = rowOfst * kernel.cols;
-        for (int colDepth = 0; colDepth <= log2[kernel.cols]; colDepth++)
+        for (int colDepth = 0; colDepth <= colDepthLim; colDepth++)
         {
             int colOfst = 1 << colDepth;
             int colSkip = colOfst - 1;
