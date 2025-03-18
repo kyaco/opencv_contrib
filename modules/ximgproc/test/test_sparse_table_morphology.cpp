@@ -45,10 +45,12 @@ Mat knBig() { return getStructuringElement(cv::MorphShapes::MORPH_RECT, Size(201
 Mat knAsymm (){
     return (Mat_<uchar>(5, 5) << 0,0,0,0,0, 0,0,1,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,1,0,0);
 }
-Mat knRnd(int size)
+Mat knRnd(int size, int density)
 {
     Mat rndMat(size, size, CV_8UC1);
-    randu(rndMat, 0, 2);
+    theRNG().state = getTickCount();
+    randu(rndMat, 0, density + 1);
+    cv::min(rndMat, 1, rndMat);
     return rndMat;
 }
 
@@ -211,7 +213,13 @@ void p2RCov(InputArray kernel)
     }
     assertArraysIdentical(expected, actual);
 }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd) { p2RCov(knRnd(100)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd1) { p2RCov(knRnd(1000, 1)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd2) { p2RCov(knRnd(1000, 1)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd3) { p2RCov(knRnd(1000, 2)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd4) { p2RCov(knRnd(1000, 2)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd5) { p2RCov(knRnd(1000, 3)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd6) { p2RCov(knRnd(1000, 3)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_kn5) { p2RCov(kn5()); }
 
 #pragma endregion
 

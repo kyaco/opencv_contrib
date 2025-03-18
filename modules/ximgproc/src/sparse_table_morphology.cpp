@@ -10,6 +10,45 @@
 namespace cv {
 namespace stMorph {
 
+int log2(int n)
+{
+    int ans = -1;
+    while (n > 0)
+    {
+        n /= 2;
+        ans++;
+    }
+    return ans;
+}
+
+void findSeeds(const Mat& stNode, std::vector<Rect>& const p2Rects, int rowDepth, int colDepth)
+{
+    int rowOfst = 1 << rowDepth;
+    int colOfst = 1 << colDepth;
+    for (int row = 0; row < stNode.rows; row++)
+    {
+        for (int col = 0; col < stNode.cols; col++)
+        {
+            // select white cells
+            if (stNode.at<uchar>(row, col) == 0) continue;
+
+            // select corner cells
+            if (col > 0 && stNode.at<uchar>(row, col - 1) == 1
+                && col + 1 < stNode.cols && stNode.at<uchar>(row, col + 1) == 1) continue;
+            if (row > 0 && stNode.at<uchar>(row - 1, col) == 1
+                && row + 1 < stNode.rows && stNode.at<uchar>(row + 1, col) == 1) continue;
+
+            // zignore if neighboring block is white; will be alive in deeper table
+            if (col + colOfst < stNode.cols && stNode.at<uchar>(row, col + colOfst) == 1) continue;
+            if (col - colOfst >= 0 && stNode.at<uchar>(row, col - colOfst) == 1) continue;
+            if (row + rowOfst < stNode.rows && stNode.at<uchar>(row + rowOfst, col) == 1) continue;
+            if (row - rowOfst >= 0 && stNode.at<uchar>(row - rowOfst, col) == 1) continue;
+
+            p2Rects.emplace_back(col, row, colDepth, rowDepth);
+        }
+    }
+}
+
 // Generate list of rectangles whose width and height are power of 2.
 // (The width and height values of returned rects ​​are the log2 of the actual values.)
 std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
@@ -18,104 +57,29 @@ std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
 
     Mat kernel = _kernel.getMat();
 
-    // generate log2 table
-    int len = std::max(kernel.rows, kernel.cols) + 1;
-    std::vector<int> log2(len);
-    for (int i = 2; i < len; i++) log2[i] = log2[i >> 1] + 1;
-
-    // generate sparse table for the kernel
-    std::vector<std::vector<Mat>> st(log2[kernel.rows] + 1, std::vector<Mat>(log2[kernel.cols] + 1));
-    st[0][0] = kernel;
-    int colDepthLim = log2[kernel.cols];
-    int rowDepthLim = log2[kernel.rows];
-    for (int colDepth = 1; colDepth <= colDepthLim; colDepth++)
-    {
-        int colStep = 1 << (colDepth - 1);
-        int colLim = kernel.cols - (1 << colDepth) + 1;
-
-        Rect rect1(0, 0, colLim, kernel.rows);
-        Rect rect2(colStep, 0, colLim, kernel.rows);
-        Mat src1 = st[0][colDepth - 1](rect1);
-        Mat src2 = st[0][colDepth - 1](rect2);
-        st[0][colDepth].create(kernel.size(), kernel.type());
-        Mat next = st[0][colDepth](rect1);
-        cv::bitwise_and(src1, src2, next);
-        if (countNonZero(next) == 0)
-        {
-            colDepthLim = colDepth;
-            break;
-        }
-    }
-    for (int rowDepth = 1; rowDepth <= rowDepthLim; rowDepth++)
-    {
-        int nonZero = 0;
-
-        int rowStep = 1 << (rowDepth - 1);
-        int rowLim = kernel.rows - (1 << rowDepth) + 1;
-        for (int colDepth = 0; colDepth <= colDepthLim; colDepth++)
-        {
-            int colStep = 0;
-            int colLim = kernel.cols - (1 << colDepth) + 1;
-
-            Rect rect1(0, 0, colLim, rowLim);
-            Rect rect2(colStep, rowStep, colLim, rowLim);
-            Mat src1 = st[rowDepth - 1][colDepth](rect1);
-            Mat src2 = st[rowDepth - 1][colDepth](rect2);
-            st[rowDepth][colDepth].create(kernel.size(), kernel.type());
-            Mat next = st[rowDepth][colDepth](rect1);
-            cv::bitwise_and(src1, src2, next);
-
-            if (colDepth == 0)
-            {
-                nonZero = countNonZero(next);
-            }
-        }
-        if (nonZero == 0)
-        {
-            rowDepthLim = rowDepth;
-            break;
-        }
-    }
-
-    // find pow2 rectangles
     std::vector<Rect> p2Rects;
-    for (int rowDepth = 0; rowDepth <= rowDepthLim; rowDepth++)
+    Mat stCache = kernel;
+    int rowLim = log2(kernel.rows);
+    int colLim = log2(kernel.cols);
+    for (int rowDepth = 0; rowDepth <= rowLim; rowDepth++)
     {
-        int rowOfst = 1 << rowDepth;
-        int rowSkip = rowOfst - 1;
-        int rowLim = kernel.rows - rowSkip;
-        int x = rowOfst * kernel.cols;
-        for (int colDepth = 0; colDepth <= colDepthLim; colDepth++)
+        Mat st = stCache.clone();
+        for (int colDepth = 0; colDepth <= colLim; colDepth++)
         {
-            int colOfst = 1 << colDepth;
-            int colSkip = colOfst - 1;
-            int colLim = kernel.cols - colSkip;
-
-            uchar* ptr = st[rowDepth][colDepth].ptr();
-            for (int row = 0; row < rowLim; row++)
-            {
-                for (int col = 0; col < colLim; col++, ptr++)
-                {
-                    // ignore black cell
-                    if (ptr[0] == 0) continue;
-
-                    // ignore if both sides are white by each axis
-                    if (col > 0 && ptr[-1] == 1
-                        && col < colLim && ptr[1] == 1) continue;
-                    if (row > 0 && ptr[-kernel.cols]
-                        && row < rowLim && ptr[kernel.cols] == 1) continue;
-
-                    // ignore if neighboring block is white; will be alive in deeper table
-                    if (col + colOfst < colLim && ptr[colOfst] == 1) continue;
-                    if (col - colOfst >= 0 && ptr[-colOfst] == 1) continue;
-                    if (row + rowOfst < rowLim && ptr[x] == 1) continue;
-                    if (row - rowOfst >= 0 && ptr[-x] == 1) continue;
-
-                    p2Rects.emplace_back(col, row, colDepth, rowDepth);
-                }
-                ptr += colSkip;
-            }
+            findSeeds(st, p2Rects, rowDepth, colDepth);
+            int colStep = 1 << colDepth;
+            if (st.cols - colStep < 0) break;
+            Rect s1(0, 0, st.cols - colStep, st.rows);
+            Rect s2(colStep, 0, st.cols - colStep, st.rows);
+            cv::min(st(s1), st(s2), st);
+            if (countNonZero(st) == 0) break;
         }
+        int rowStep = 1 << rowDepth;
+        if (stCache.rows - rowStep < 0) break;
+        Rect s1(0, 0, stCache.cols, stCache.rows - rowStep);
+        Rect s2(0, rowStep, stCache.cols, stCache.rows - rowStep);
+        cv::min(stCache(s1), stCache(s2), stCache);
+        if (countNonZero(stCache) == 0) break;
     }
     return p2Rects;
 }
