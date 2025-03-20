@@ -34,23 +34,24 @@ Mat im(int type)
 
     return img;
 }
-Mat kn5() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(5, 5)); }
 Mat kn4() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(4, 4)); }
+Mat kn5() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(5, 5)); }
+Mat kn51() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(51, 51)); }
+Mat knBig() { return getStructuringElement(cv::MorphShapes::MORPH_RECT, Size(201, 201)); }
 Mat kn1Zero() { return Mat::zeros(1, 1, CV_8UC1); }
 Mat kn1One() { return Mat::ones(1, 1, CV_8UC1); }
 Mat knEmpty() { return Mat(); }
 Mat knZeros() { return Mat::zeros(5, 5, CV_8UC1); }
 Mat knOnes() { return Mat::ones(5, 5, CV_8UC1); }
-Mat knBig() { return getStructuringElement(cv::MorphShapes::MORPH_RECT, Size(201, 201)); }
-Mat knAsymm (){
-    return (Mat_<uchar>(5, 5) << 0,0,0,0,0, 0,0,1,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,1,0,0);
-}
+Mat knAsymm (){ return (Mat_<uchar>(5, 5) << 0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0); }
 Mat knRnd(int size, int density)
 {
     Mat rndMat(size, size, CV_8UC1);
     theRNG().state = getTickCount();
-    randu(rndMat, 0, density + 1);
-    cv::min(rndMat, 1, rndMat);
+    randu(rndMat, 2, 102);
+    density++;
+    rndMat.setTo(0, density < rndMat);
+    rndMat.setTo(1, 1 < rndMat);
     return rndMat;
 }
 
@@ -201,7 +202,7 @@ TEST(ximgproc_StMorph_ex, regression_hitmiss) { ex_rgr(im(CV_8UC1), MORPH_HITMIS
 
 #pragma region power2RectCovering
 
-void p2RCov(InputArray kernel)
+std::vector<Rect> p2RCov(InputArray kernel)
 {
     std::vector<Rect> p2Rects = stMorph::genPow2RectsToCoverKernel(kernel);
     Mat expected = kernel.getMat();
@@ -212,98 +213,16 @@ void p2RCov(InputArray kernel)
         actual(rect).setTo(1);
     }
     assertArraysIdentical(expected, actual);
+    return p2Rects;
 }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd1) { p2RCov(knRnd(1000, 1)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd2) { p2RCov(knRnd(1000, 1)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd3) { p2RCov(knRnd(1000, 2)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd4) { p2RCov(knRnd(1000, 2)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd5) { p2RCov(knRnd(1000, 3)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd6) { p2RCov(knRnd(1000, 3)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_kn5) { p2RCov(kn5()); }
-
-#pragma endregion
-
-#pragma region morph_dev
-
-TEST(ximgproc_StMorph_dev, compare_with_original_erode)
+void VisualizeCovering(Mat& kernel, const std::vector<Rect>& rects)
 {
-    // preparation
-    int kRadius = 15;
-    //Size sz(200, 150);
-    Size sz = szVGA;
-    int type = CV_8UC3;
-
-    int kSize = kRadius * 2 + 1;
-    Point anchor(kRadius, kRadius);
-    Mat src(sz, type);
-    Mat expected(sz, type);
-    Mat actual(sz, type);
-    Size kernelSize(kSize, kSize);
-    Mat kernel = getStructuringElement(cv::MorphShapes::MORPH_RECT, kernelSize, Point(kRadius, kRadius));
-
-    src.setTo(240);
-    putText(src, "A", Point(sz.height / 5 * 1, sz.height / 20 * 15), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(255, 40, 40), 30, LineTypes::FILLED);
-    putText(src, "B", Point(sz.height / 5 * 2, sz.height / 20 * 16), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(20, 255, 0), 30, LineTypes::FILLED);
-    putText(src, "C", Point(sz.height / 5 * 3, sz.height / 20 * 17), HersheyFonts::FONT_HERSHEY_TRIPLEX, 10, Scalar(10, 10, 255), 30, LineTypes::FILLED);
-
-    cv::TickMeter timer;
-
-    // original
-    timer.start();
-    cv::erode(src, expected, kernel); // 482ms for Elipse, kSize = 101
-    timer.stop();
-    double originalTime = timer.getTimeMilli();
-    timer.reset();
-
-    // proposal
-    timer.start();
-    stMorph::erode(src, actual, kernel); // 217ms for Elipse, kSize = 101
-    timer.stop();
-    double proposalTime = timer.getTimeMilli();
-
-    // assertion
-    Mat diff;
-    cv::absdiff(expected, actual, diff);
-
-#if 0
-    putText(expected, std::to_string(originalTime), cv::Point(10, 20), HersheyFonts::FONT_HERSHEY_TRIPLEX, 1, Scalar(250, 40, 40), 1, LineTypes::FILLED);
-    putText(actual, std::to_string(proposalTime), cv::Point(10, 20), HersheyFonts::FONT_HERSHEY_TRIPLEX, 1, Scalar(250, 40, 40), 1, LineTypes::FILLED);
-    Mat con;
-    double rate = 300.0 / src.cols;
-    cv::hconcat(src, expected, con);
-    cv::hconcat(con, actual, con);
-    cv::resize(con, con, Size(), rate, rate, InterpolationFlags::INTER_NEAREST);
-    cv::resize(diff, diff, Size(), rate, rate, InterpolationFlags::INTER_NEAREST);
-    imshow("Bordered source", con);
-    imshow("diff", diff);
-    waitKey();
-    destroyAllWindows();
-#endif
-
-    double min, max;
-    cv::minMaxLoc(diff, &min, &max);
-    CV_Assert(max == 0);
-}
-
-TEST(ximgproc_StMorph_dev, POW2RECT_COVERING)
-{
-    uchar ary[]{
-        0, 1, 0, 1, 0, 1, 0, 1,
-        1, 1, 0, 1, 1, 1, 1, 1,
-        1, 0, 0, 1, 0, 1, 0, 1,
-        0, 0, 1, 1, 1, 1, 1, 1,
-        0, 1, 0, 1, 0, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1,
-        0, 1, 0, 1, 0, 1, 0, 1,
-        1, 1, 1, 1, 1, 1, 1, 1,
-    };
-    Mat kernel(8, 8, CV_8UC1, ary);
-    std::vector<Rect> rects = stMorph::genPow2RectsToCoverKernel(kernel);
-
-    int rate = 20;
+    const int rate = 20;
+    const int fluct = 5;
+    const int colors = 20;
     resize(kernel * 255, kernel, Size(), rate, rate, InterpolationFlags::INTER_NEAREST);
     cvtColor(kernel, kernel, cv::COLOR_GRAY2BGR);
-    Scalar color[20]{
+    Scalar color[colors]{
         Scalar(83, 89, 73), Scalar(49, 238, 73), Scalar(220, 192, 189), Scalar(174, 207, 34),
         Scalar(144, 169, 187), Scalar(137, 94, 76), Scalar(42, 11, 215), Scalar(113, 11, 204),
         Scalar(71, 124, 8), Scalar(192, 38, 8), Scalar(82, 201, 8), Scalar(70, 7, 112),
@@ -313,35 +232,39 @@ TEST(ximgproc_StMorph_dev, POW2RECT_COVERING)
     for (int i = 0; i < rects.size(); i++)
     {
         Rect rect = rects[i];
-        Point lt((rect.x) * rate + i % 11, (rect.y) * rate + i % 11);
-        Point lb((rect.x) * rate + i % 11, (rect.y + (1 << rect.height)) * rate - 11 + i % 11);
-        Point rb((rect.x + (1 << rect.width)) * rate - 11 + i % 11, (rect.y + (1 << rect.height)) * rate - 11 + i % 11);
-        Point rt((rect.x + (1 << rect.width)) * rate - 11 + i % 11, (rect.y) * rate + i % 11);
-        cv::line(kernel, lt, lb, color[i % 20], 2);
-        cv::line(kernel, lb, rb, color[i % 20], 2);
-        cv::line(kernel, rb, rt, color[i % 20], 2);
-        cv::line(kernel, rt, lt, color[i % 20], 2);
+        Point lt((rect.x) * rate + i % fluct, (rect.y) * rate + i % fluct);
+        Point lb((rect.x) * rate + i % fluct, (rect.y + (1 << rect.height)) * rate - fluct + i % fluct);
+        Point rb((rect.x + (1 << rect.width)) * rate - fluct + i % fluct, (rect.y + (1 << rect.height)) * rate - fluct + i % fluct);
+        Point rt((rect.x + (1 << rect.width)) * rate - fluct + i % fluct, (rect.y) * rate + i % fluct);
+        cv::line(kernel, lt, lb, color[i % colors], 1);
+        cv::line(kernel, lb, rb, color[i % colors], 1);
+        cv::line(kernel, rb, rt, color[i % colors], 1);
+        cv::line(kernel, rt, lt, color[i % colors], 1);
     }
-    //imshow("kernel", kernel);
-
+#if 0
+    imshow("Map", kernel);
     waitKey();
     destroyAllWindows();
+#endif
+}
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd1) { p2RCov(knRnd(1000, 1)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd10) { p2RCov(knRnd(1000, 10)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd30) { p2RCov(knRnd(1000, 30)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd50) { p2RCov(knRnd(1000, 50)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd80) { p2RCov(knRnd(1000, 80)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_rnd90) { p2RCov(knRnd(1000, 90)); }
+TEST(ximgproc_StMorph_private, feature_P2RCov_visualize) {
+    Mat kernel = knRnd(50, 70);
+    auto rects = p2RCov(kernel);
+    VisualizeCovering(kernel, rects);
 }
 
-TEST(ximgproc_StMorph_dev, PLANNING)
-{
-    std::vector<std::vector<bool>> map{
-        std::vector<bool>{0,0,0,0,0,0,0,1},
-        std::vector<bool>{0,0,0,0,0,0,1,0},
-        std::vector<bool>{0,0,0,0,0,1,0,0},
-        std::vector<bool>{0,0,0,0,1,0,0,0},
-        std::vector<bool>{0,0,0,1,0,0,0,0},
-        std::vector<bool>{0,0,1,0,0,0,0,0},
-        std::vector<bool>{0,1,0,0,0,0,0,0},
-        std::vector<bool>{1,0,0,0,0,0,0,0},
-    };
-    auto res = stMorph::planSparseTableConstr(map);
+#pragma endregion
 
+#pragma region planning
+
+void VisualizePlanning(std::vector<std::vector<bool>> map, std::vector<stMorph::StStep> res)
+{
     int g = 30;
     int r = map.size();
     int c = map[0].size();
@@ -365,43 +288,63 @@ TEST(ximgproc_StMorph_dev, PLANNING)
             cv::line(m, Point(edge.dimCol * g + g / 2, edge.dimRow * g + g / 2), Point((edge.dimCol + 1) * g + g / 2, edge.dimRow * g + g / 2), Scalar(100, 100, 100), 2);
         }
     }
-//    imshow("Map", m);
-
+#if 0
+    imshow("Map", m);
     waitKey();
     destroyAllWindows();
+#endif
 }
+void feture_planning(const Mat& mat)
+{
+    std::vector<std::vector<bool>> map(mat.rows, std::vector<bool>(mat.cols, false));
+    for (int r = 0; r < mat.rows; r++) for (int c = 0; c < mat.cols; c++)
+        map[r][c] = (mat.ptr<uchar>(r, c)[0] == 1);
 
+    auto res = stMorph::planSparseTableConstr(map);
+    VisualizePlanning(map, res);
+}
+TEST(ximgproc_StMorph_private, planning2){ feture_planning(knRnd(14, 20)); }
+
+#pragma endregion
+
+#pragma region morph_comp
+
+void stDilate(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
+    int iterations = 1,
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+{
+    Mat tmp;
+    stMorph::dilate(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
+}
+void stErode(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
+    int iterations = 1,
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+{
+    Mat tmp;
+    stMorph::erode(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
+}
 void cvDilate(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
     BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
 {
-    Mat actual;
-    dilate(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
+    Mat tmp;
+    dilate(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
 }
 void cvErode(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
     BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
 {
-    Mat actual;
-    erode(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
+    Mat tmp;
+    erode(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
 }
-Mat kn51() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(51, 51)); }
-TEST(ximgproc_StMorph_dev, big_stDilate)
-{
-    dilate_ftr(im(CV_8UC3), kn51());
-}
-TEST(ximgproc_StMorph_dev, big_stEerode)
-{
-    erode_ftr(im(CV_8UC3), kn51());
-}
-TEST(ximgproc_StMorph_dev, big_cvDilate)
-{
-    cvDilate(im(CV_8UC3), kn51());
-}
-TEST(ximgproc_StMorph_dev, big_cvErode)
-{
-    cvErode(im(CV_8UC3), kn51());
-}
+TEST(ximgproc_StMorph_comp, 51_stDilate) { stDilate(im(CV_8UC3), kn51()); }
+TEST(ximgproc_StMorph_comp, 51_stEerode) { stErode(im(CV_8UC3), kn51()); }
+TEST(ximgproc_StMorph_comp, 51_cvDilate) { cvDilate(im(CV_8UC3), kn51()); }
+TEST(ximgproc_StMorph_comp, 51_cvErode) { cvErode(im(CV_8UC3), kn51()); }
+TEST(ximgproc_StMorph_comp, 5_stDilate) { stDilate(im(CV_8UC3), knOnes()); }
+TEST(ximgproc_StMorph_comp, 5_stEerode) { stErode(im(CV_8UC3), knOnes()); }
+TEST(ximgproc_StMorph_comp, 5_cvDilate) { cvDilate(im(CV_8UC3), knOnes()); }
+TEST(ximgproc_StMorph_comp, 5_cvErode) { cvErode(im(CV_8UC3), knOnes()); }
 
 #pragma endregion
 
