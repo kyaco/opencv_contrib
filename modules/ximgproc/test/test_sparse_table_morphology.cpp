@@ -202,20 +202,30 @@ TEST(ximgproc_StMorph_ex, regression_hitmiss) { ex_rgr(im(CV_8UC1), MORPH_HITMIS
 
 #pragma region power2RectCovering
 
-std::vector<Rect> p2RCov(InputArray kernel)
+std::vector<std::vector<std::vector<Point>>> p2RCov(InputArray kernel)
 {
-    std::vector<Rect> p2Rects = stMorph::genPow2RectsToCoverKernel(kernel);
+    Mat _kernel = kernel.getMat();
+    int rowDepthLim = stMorph::log2(stMorph::longestRowRunLength(_kernel)) + 1;
+    int colDepthLim = stMorph::log2(stMorph::longestColRunLength(_kernel)) + 1;
+    std::vector<std::vector<std::vector<Point>>> p2Rects
+        = stMorph::genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
     Mat expected = kernel.getMat();
     Mat actual = Mat::zeros(kernel.size(), kernel.type());
-    for (Rect p2Rect: p2Rects)
+    for (int r = 0; r < p2Rects.size(); r++)
     {
-        Rect rect(p2Rect.x, p2Rect.y, 1 << p2Rect.width, 1 << p2Rect.height);
-        actual(rect).setTo(1);
+        for (int c = 0; c < p2Rects[r].size(); c++)
+        {
+            for (Point p : p2Rects[r][c])
+            {
+                Rect rect(p.x, p.y, 1 << c, 1 << r);
+                actual(rect).setTo(1);
+            }
+        }
     }
     assertArraysIdentical(expected, actual);
     return p2Rects;
 }
-void VisualizeCovering(Mat& kernel, const std::vector<Rect>& rects)
+void VisualizeCovering(Mat& kernel, const std::vector<std::vector<std::vector<Point>>>& rects)
 {
     const int rate = 20;
     const int fluct = 5;
@@ -229,17 +239,30 @@ void VisualizeCovering(Mat& kernel, const std::vector<Rect>& rects)
         Scalar(166, 219, 201), Scalar(154, 173, 0), Scalar(132, 127, 139), Scalar(154, 1, 68),
         Scalar(231, 131, 56), Scalar(206, 238, 136), Scalar(188, 78, 173), Scalar(27, 178, 206)
     };
-    for (int i = 0; i < rects.size(); i++)
+    int i = 0;
+    for (int r = 0; r < rects.size(); r++)
     {
-        Rect rect = rects[i];
-        Point lt((rect.x) * rate + i % fluct, (rect.y) * rate + i % fluct);
-        Point lb((rect.x) * rate + i % fluct, (rect.y + (1 << rect.height)) * rate - fluct + i % fluct);
-        Point rb((rect.x + (1 << rect.width)) * rate - fluct + i % fluct, (rect.y + (1 << rect.height)) * rate - fluct + i % fluct);
-        Point rt((rect.x + (1 << rect.width)) * rate - fluct + i % fluct, (rect.y) * rate + i % fluct);
-        cv::line(kernel, lt, lb, color[i % colors], 1);
-        cv::line(kernel, lb, rb, color[i % colors], 1);
-        cv::line(kernel, rb, rt, color[i % colors], 1);
-        cv::line(kernel, rt, lt, color[i % colors], 1);
+        for (int c = 0; c < rects[r].size(); c++)
+        {
+            Size s(1 << c, 1 << r);
+            for (Point p : rects[r][c])
+            {
+                Rect rect(p, s);
+                int l = (rect.x) * rate + i % fluct;
+                int t = (rect.y) * rate + i % fluct;
+                int r = (rect.x + rect.width) * rate - fluct + i % fluct;
+                int b = (rect.y + rect.height) * rate - fluct + i % fluct;
+                Point lt(l, t);
+                Point lb(l, b);
+                Point rb(r, b);
+                Point rt(r, t);
+                cv::line(kernel, lt, lb, color[i % colors], 1);
+                cv::line(kernel, lb, rb, color[i % colors], 1);
+                cv::line(kernel, rb, rt, color[i % colors], 1);
+                cv::line(kernel, rt, lt, color[i % colors], 1);
+                i++;
+            }
+        }
     }
 #if 0
     imshow("Map", kernel);
@@ -263,7 +286,8 @@ TEST(ximgproc_StMorph_private, feature_P2RCov_visualize) {
 
 #pragma region planning
 
-void VisualizePlanning(std::vector<std::vector<bool>> map, std::vector<stMorph::StStep> res)
+void VisualizePlanning(
+    std::vector<std::vector<std::vector<Point>>> map, std::vector<stMorph::StStep> res)
 {
     int g = 30;
     int r = map.size();
@@ -273,20 +297,21 @@ void VisualizePlanning(std::vector<std::vector<bool>> map, std::vector<stMorph::
     {
         for (int col = 0; col < c; col++)
         {
-            if (map[row][col]) cv::rectangle(m, Rect(col * g + g / 2 - 5, row * g + g / 2 - 5, 11, 11), Scalar(20, 20, 255), -1);
+            Rect nodeRect(col * g + g / 2 - 5, row * g + g / 2 - 5, 11, 11);
+            if (map[row][col].size() > 0)
+                cv::rectangle(m, nodeRect, Scalar(20, 20, 255), -1);
         }
     }
     for (int i = 0; i < res.size(); i++)
     {
         auto edge = res[i];
+        Point sp(edge.dimCol * g + g / 2, edge.dimRow * g + g / 2);
+        Point ep;
         if (edge.ax == stMorph::Dim::Row)
-        {
-            cv::line(m, Point(edge.dimCol * g + g / 2, edge.dimRow * g + g / 2), Point(edge.dimCol * g + g / 2, (edge.dimRow + 1) * g + g / 2), Scalar(100, 100, 100), 2);
-        }
+            ep = Point(edge.dimCol * g + g / 2, (edge.dimRow + 1) * g + g / 2);
         else
-        {
-            cv::line(m, Point(edge.dimCol * g + g / 2, edge.dimRow * g + g / 2), Point((edge.dimCol + 1) * g + g / 2, edge.dimRow * g + g / 2), Scalar(100, 100, 100), 2);
-        }
+            ep = Point((edge.dimCol + 1) * g + g / 2, edge.dimRow * g + g / 2);
+        cv::line(m, sp, ep, Scalar(100, 100, 100), 2);
     }
 #if 0
     imshow("Map", m);
@@ -296,13 +321,24 @@ void VisualizePlanning(std::vector<std::vector<bool>> map, std::vector<stMorph::
 }
 void feture_planning(const Mat& mat)
 {
-    std::vector<std::vector<bool>> map(mat.rows, std::vector<bool>(mat.cols, false));
-    for (int r = 0; r < mat.rows; r++) for (int c = 0; c < mat.cols; c++)
-        map[r][c] = (mat.ptr<uchar>(r, c)[0] == 1);
+    std::vector<std::vector<std::vector<Point>>> map;
+    for (int r = 0; r < mat.rows; r++)
+    {
+        map.push_back(std::vector<std::vector<Point>>());
+        for (int c = 0; c < mat.cols; c++)
+        {
+            map[r].push_back(std::vector<Point>());
+            if (mat.at<uchar>(r, c) == 1)
+            {
+                map[r][c].push_back(Point(0, 0));
+            }
+        }
+    }
 
-    auto res = stMorph::planSparseTableConstr(map);
-    VisualizePlanning(map, res);
+    auto r = stMorph::planSparseTableConstr(map, mat.rows, mat.cols, stMorph::StStrategy::Faster);
+    VisualizePlanning(map, r);
 }
+TEST(ximgproc_StMorph_private, planning1) { feture_planning(knAsymm()); }
 TEST(ximgproc_StMorph_private, planning2){ feture_planning(knRnd(14, 20)); }
 
 #pragma endregion

@@ -105,34 +105,77 @@ enum Op
     Min, Max
 };
 
+enum StStrategy
+{
+    Faster,
+    SaveMemory
+};
+
+enum QueryType
+{
+    Stuck,
+    Pop,
+    Fill,
+};
+
 struct StStep
 {
-    StStep(int dimR, int dimC, Dim _ax)
+    StStep(QueryType _qType, int dimR, int dimC, Dim _ax, std::vector<Point> _points)
     {
+        qType = _qType;
         dimRow = dimR;
         dimCol = dimC;
         ax = _ax;
+        points = _points;
     }
+    QueryType qType;
     int dimRow;
     int dimCol;
     Dim ax;
+    std::vector<Point> points;
 };
 
 /*
-* Find a smaller set of power-of-2 rectangles to cover the kernel.
-* - The width and the height of each rectangles are power of 2.
-* - Overlappings of rectangles are allowed.
-*
-* this method may be applied for the covering polygon problem with rectangle.
-* https://www.sciencedirect.com/science/article/pii/S0019995884800121z
+* Find a set of power-2-rectangles to cover the kernel.
+* power-2-rectangles is a rectangle whose height and width are both power of 2.
 */
-CV_EXPORTS_W std::vector<Rect> genPow2RectsToCoverKernel(InputArray kernel);
+CV_EXPORTS_W std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
+    const Mat& kernel, int rowLim, int colLim);
 //
-///*
-//* Plan the order to calculate the sparse table nodes.
-//*/
-CV_EXPORTS_W std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> stNodeMap);
+/*
+* Plan the order to fill the required sparse table nodes.
+*/
+CV_EXPORTS_W std::vector<StStep> planSparseTableConstr(
+    std::vector<std::vector<std::vector<Point>>> stNodeMap, int rowLim, int colLim,
+    StStrategy strategy = Faster);
+
+CV_EXPORTS_W int log2(int n);
+CV_EXPORTS_W int longestRowRunLength(const Mat& kernel);
+CV_EXPORTS_W int longestColRunLength(const Mat& kernel);
 
 }} // cv::stMorph::
 
 #endif
+
+/*
+
+About sparse table:
+https://qiita.com/recuraki/items/0fcbc9e2abbc4fae5f62
+https://www.geeksforgeeks.org/sparse-table/
+
+2D-sparse table:
+https://kopricky.github.io/code/DataStructure_Advanced/sparse_table_2D.html
+https://www.geeksforgeeks.org/2d-range-minimum-query-in-o1/
+
+With 2D sparse table, we can get the min or max value in each power-of-2 rectangle quickly.
+
+
+1. Find a set of power-of-2 rectangles which covers the kernel.
+2. Group the rectangles by the size.
+3. Fill the sparse table
+
+https://gobi-tk.hatenablog.com/entry/2024/09/18/012709
+https://link.springer.com/article/10.1007/BF01758762
+
+
+*/

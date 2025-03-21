@@ -21,10 +21,53 @@ int log2(int n)
     return ans;
 }
 
-void findSeeds(const Mat& stNode, std::vector<Rect>& const p2Rects, int rowDepth, int colDepth)
+int longestRowRunLength(const Mat& kernel)
+{
+    int cnt = 0;
+    int maxLen = 0;
+    for (int c = 0; c < kernel.cols; c++)
+    {
+        cnt = 0;
+        for (int r = 0; r < kernel.rows; r++)
+        {
+            if (kernel.at<uchar>(r, c) == 0)
+            {
+                maxLen = std::max(maxLen, cnt);
+                cnt = 0;
+            }
+            else cnt++;
+        }
+        maxLen = std::max(maxLen, cnt);
+    }
+    return maxLen;
+}
+
+int longestColRunLength(const Mat& kernel)
+{
+    int cnt = 0;
+    int maxLen = 0;
+    for (int r = 0; r < kernel.rows; r++)
+    {
+        cnt = 0;
+        for (int c = 0; c < kernel.cols; c++)
+        {
+            if (kernel.at<uchar>(r, c) == 0)
+            {
+                maxLen = std::max(maxLen, cnt);
+                cnt = 0;
+            }
+            else cnt++;
+        }
+        maxLen = std::max(maxLen, cnt);
+    }
+    return maxLen;
+}
+
+std::vector<Point> findSeeds(const Mat& stNode, int rowDepth, int colDepth)
 {
     int rowOfst = 1 << rowDepth;
     int colOfst = 1 << colDepth;
+    std::vector<Point> p2Rects;
     for (int row = 0; row < stNode.rows; row++)
     {
         for (int col = 0; col < stNode.cols; col++)
@@ -44,102 +87,126 @@ void findSeeds(const Mat& stNode, std::vector<Rect>& const p2Rects, int rowDepth
             if (row + rowOfst < stNode.rows && stNode.at<uchar>(row + rowOfst, col) == 1) continue;
             if (row - rowOfst >= 0 && stNode.at<uchar>(row - rowOfst, col) == 1) continue;
 
-            p2Rects.emplace_back(col, row, colDepth, rowDepth);
+            p2Rects.emplace_back(col, row);
         }
     }
+    return p2Rects;
 }
 
 // Generate list of rectangles whose width and height are power of 2.
 // (The width and height values of returned rects ​​are the log2 of the actual values.)
-std::vector<Rect> genPow2RectsToCoverKernel(InputArray _kernel)
+std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
+    const Mat& kernel, int rowDepthLim, int colDepthLim)
 {
-    CV_Assert(_kernel.type() == CV_8UC1);
+    CV_Assert(kernel.type() == CV_8UC1);
 
-    Mat kernel = _kernel.getMat();
-
-    std::vector<Rect> p2Rects;
+    std::vector<std::vector<std::vector<Point>>> p2Rects;
     Mat stCache = kernel;
-    int rowLim = log2(kernel.rows);
-    int colLim = log2(kernel.cols);
-    for (int rowDepth = 0; rowDepth <= rowLim; rowDepth++)
+    for (int rowDepth = 0; rowDepth < rowDepthLim; rowDepth++)
     {
         Mat st = stCache.clone();
-        for (int colDepth = 0; colDepth <= colLim; colDepth++)
+        p2Rects.emplace_back(std::vector<std::vector<Point>>());
+        for (int colDepth = 0; colDepth < colDepthLim; colDepth++)
         {
-            findSeeds(st, p2Rects, rowDepth, colDepth);
+            p2Rects[rowDepth].emplace_back(findSeeds(st, rowDepth, colDepth));
             int colStep = 1 << colDepth;
             if (st.cols - colStep < 0) break;
             Rect s1(0, 0, st.cols - colStep, st.rows);
             Rect s2(colStep, 0, st.cols - colStep, st.rows);
             cv::min(st(s1), st(s2), st);
-            if (countNonZero(st) == 0) break;
         }
         int rowStep = 1 << rowDepth;
         if (stCache.rows - rowStep < 0) break;
         Rect s1(0, 0, stCache.cols, stCache.rows - rowStep);
         Rect s2(0, rowStep, stCache.cols, stCache.rows - rowStep);
         cv::min(stCache(s1), stCache(s2), stCache);
-        if (countNonZero(stCache) == 0) break;
     }
+
+    // todo: implement greedy algorithm to minimize the rectangle set covering the kernel.
+
     return p2Rects;
 }
 
-std::vector<StStep> planSparseTableConstr(std::vector<std::vector<bool>> sparseMatMap)
+std::vector<StStep> planSparseTableConstr(
+    std::vector<std::vector<std::vector<Point>>> pow2Rects, int rowDepthLim, int colDepthLim,
+    StStrategy strategy)
 {
-/*
-*
-* AtCoder: https://atcoder.jp/contests/ahc037/tasks/ahc037_a
-*
-* The rectilinear steiner arborescence problem
-* https://link.springer.com/article/10.1007/BF01758762
-*
-*/
-    std::vector<Point> pos;
-    sparseMatMap[0][0] = true;
-    for (int r = 0; r < sparseMatMap.size(); r++)
-        for (int c = 0; c < sparseMatMap[r].size(); c++)
-            if (sparseMatMap[r][c]) pos.emplace_back(c, r);
-    std::vector<StStep> plan;
-    while(pos.size() > 1)
+    // list up required sparse table nodes.
+    std::vector<std::vector<bool>> sparseMatMap(rowDepthLim, std::vector<bool>(colDepthLim, false));
+    for (int r = 0; r < pow2Rects.size(); r++)
     {
-        int maxCost = -1;
-        int maxI = 0;
-        int maxJ = 0;
-        int maxX = 0;
-        int maxY = 0;
-        for (int i = 0; i < pos.size(); i++)
+        for (int c = 0; c < pow2Rects[r].size(); c++)
         {
-            for (int j = i + 1; j < pos.size(); j++)
+            if (pow2Rects[r][c].size() > 0) sparseMatMap[r][c] = true;
+        }
+    }
+    sparseMatMap[0][0] = true;
+
+    switch (strategy)
+    {
+    case Faster:
+    {
+        /*
+        *
+        * AtCoder: https://atcoder.jp/contests/ahc037/tasks/ahc037_a
+        *
+        * The rectilinear steiner arborescence problem
+        * https://link.springer.com/article/10.1007/BF01758762
+        *
+        */
+        std::vector<Point> pos;
+        for (int r = 0; r < sparseMatMap.size(); r++)
+            for (int c = 0; c < sparseMatMap[r].size(); c++)
+                if (sparseMatMap[r][c]) pos.emplace_back(c, r);
+        std::vector<StStep> plan;
+        while (pos.size() > 1)
+        {
+            int maxCost = -1;
+            int maxI = 0;
+            int maxJ = 0;
+            int maxX = 0;
+            int maxY = 0;
+            for (int i = 0; i < pos.size(); i++)
             {
-                int _x = std::min(pos[i].x, pos[j].x);
-                int _y = std::min(pos[i].y, pos[j].y);
-                int cost = _x + _y;
-                if (maxCost < cost)
+                for (int j = i + 1; j < pos.size(); j++)
                 {
-                    maxCost = cost;
-                    maxI = i;
-                    maxJ = j;
-                    maxX = _x;
-                    maxY = _y;
+                    int _x = std::min(pos[i].x, pos[j].x);
+                    int _y = std::min(pos[i].y, pos[j].y);
+                    int cost = _x + _y;
+                    if (maxCost < cost)
+                    {
+                        maxCost = cost;
+                        maxI = i;
+                        maxJ = j;
+                        maxX = _x;
+                        maxY = _y;
+                    }
                 }
             }
+            for (int col = pos[maxI].x - 1; col >= maxX; col--)
+                plan.emplace_back(Fill, pos[maxI].y, col, Dim::Col, pow2Rects[pos[maxI].y][col]);
+            for (int row = pos[maxI].y - 1; row >= maxY; row--)
+                plan.emplace_back(Fill, row, maxX, Dim::Row, pow2Rects[row][maxX]);
+            for (int col = pos[maxJ].x - 1; col >= maxX; col--)
+                plan.emplace_back(Fill, pos[maxJ].y, col, Dim::Col, pow2Rects[pos[maxJ].y][col]);
+            for (int row = pos[maxJ].y - 1; row >= maxY; row--)
+                plan.emplace_back(Fill, row, maxX, Dim::Row, pow2Rects[row][maxX]);
+
+            pos[maxI] = Point(maxX, maxY);
+            swap(pos[maxJ], pos[pos.size() - 1]);
+            pos.pop_back();
         }
-        for (int col = pos[maxI].x - 1; col >= maxX; col--)
-            plan.emplace_back(pos[maxI].y, col, Dim::Col);
-        for (int row = pos[maxI].y - 1; row >= maxY; row--)
-            plan.emplace_back(row, maxX, Dim::Row);
-        for (int col = pos[maxJ].x - 1; col >= maxX; col--)
-            plan.emplace_back(pos[maxJ].y, col, Dim::Col);
-        for (int row = pos[maxJ].y - 1; row >= maxY; row--)
-            plan.emplace_back(row, maxX, Dim::Row);
 
-        pos[maxI] = Point(maxX, maxY);
-        swap(pos[maxJ], pos[pos.size() - 1]);
-        pos.pop_back();
+        reverse(plan.begin(), plan.end());
+        return plan;
     }
-
-    reverse(plan.begin(), plan.end());
-    return plan;
+    case StStrategy::SaveMemory:
+    {
+        // todo: implement.
+        std::vector<StStep> plan;
+        return plan;
+    }
+    }
 }
 
 template <typename T>
@@ -148,31 +215,19 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
     int borderType, const Scalar& borderVal)
 {
     T nil = (minmax == Op::Min) ? std::numeric_limits<T>::max() : std::numeric_limits<T>::min();
-    std::vector<Rect> pow2Rects = genPow2RectsToCoverKernel(kernel);
 
-    // get the depth limits;
-    int rowDepthLim = 0, colDepthLim = 0;
-    for (int i = 0; i < pow2Rects.size(); i++)
-    {
-        if (rowDepthLim < pow2Rects[i].height) rowDepthLim = pow2Rects[i].height;
-        if (colDepthLim < pow2Rects[i].width) colDepthLim = pow2Rects[i].width;
-    }
-    rowDepthLim++;
-    colDepthLim++;
-
-    // list up required sparse table nodes.
-    std::vector<std::vector<bool>> sparseMatMap(rowDepthLim, std::vector<bool>(colDepthLim, false));
-    for (int i = 0; i < pow2Rects.size(); i++)
-        sparseMatMap[pow2Rects[i].height][pow2Rects[i].width] = true;
-
-    // plan how to calculate required nodes of 2D sparse table.
-    std::vector<StStep> stPlan = planSparseTableConstr(sparseMatMap);
+    Mat _kernel = kernel.getMat();
+    int rowDepthLim = log2(longestRowRunLength(_kernel)) + 1;
+    int colDepthLim = log2(longestColRunLength(_kernel)) + 1;
+    std::vector<std::vector<std::vector<Point>>> pow2Rects
+        = genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
+    std::vector<StStep> stPlan
+        = planSparseTableConstr(pow2Rects, rowDepthLim, colDepthLim, Faster);
 
     Mat src = _src.getMat();
     _dst.create(_src.size(), _src.type());
     Mat dst = _dst.getMat();
 
-    // adding border to the source.
     Scalar bV = borderVal;
     if (borderType == BorderTypes::BORDER_CONSTANT && borderVal == morphologyDefaultBorderValue())
         bV = Scalar::all(nil);
@@ -181,8 +236,8 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
     {
         Mat expandedSrc;
         copyMakeBorder(src, expandedSrc,
-            anchor.y, kernel.cols() - 1 - anchor.y,
-            anchor.x, kernel.rows() - 1 - anchor.x,
+            anchor.y, _kernel.cols - 1 - anchor.y,
+            anchor.x, _kernel.rows - 1 - anchor.x,
             borderType, bV);
 
         dst.setTo(nil);
@@ -216,13 +271,19 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
         }
 
         // result constructioin
-        for (int i = 0; i < pow2Rects.size(); i++)
+        for (int r = 0; r < pow2Rects.size(); r++)
         {
-            Rect rect = pow2Rects[i];
-            Rect srcRect = Rect(rect.x, rect.y, dst.cols, dst.rows);
-            Mat& next = st[rect.height][rect.width](srcRect);
-            if (minmax == Op::Min) cv::min(dst, next, dst);
-            else cv::max(dst, next, dst);
+            for (int c = 0; c < pow2Rects[r].size(); c++)
+            {
+                for (Point p : pow2Rects[r][c])
+                {
+                    Rect rect(p, Size(1 << c, 1 << r));
+                    Rect srcRect(p, dst.size());
+                    Mat& srcMat = st[r][c](srcRect);
+                    if (minmax == Op::Min) cv::min(dst, srcMat, dst);
+                    else cv::max(dst, srcMat, dst);
+                }
+            }
         }
 
         src = dst;
