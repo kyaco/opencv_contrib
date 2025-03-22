@@ -95,59 +95,26 @@ static inline Point normalizeAnchor(Point anchor, Size ksize)
     return anchor;
 }
 
-enum Dim
-{
-    Col, Row
-};
-
 enum Op
 {
     Min, Max
 };
 
-enum StStrategy
-{
-    Faster,
-    SaveMemory
-};
-
-enum QueryType
-{
-    Stuck,
-    Pop,
-    Fill,
-};
-
-struct StStep
-{
-    StStep(QueryType _qType, int dimR, int dimC, Dim _ax, std::vector<Point> _points)
-    {
-        qType = _qType;
-        dimRow = dimR;
-        dimCol = dimC;
-        ax = _ax;
-        points = _points;
-    }
-    QueryType qType;
-    int dimRow;
-    int dimCol;
-    Dim ax;
-    std::vector<Point> points;
-};
-
 /*
 * Find a set of power-2-rectangles to cover the kernel.
 * power-2-rectangles is a rectangle whose height and width are both power of 2.
+* (The width and height values of returned rects ​​are the log2 of the actual values.)
 */
 CV_EXPORTS_W std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
     const Mat& kernel, int rowLim, int colLim);
 //
 /*
 * Plan the order to fill the required sparse table nodes.
+* returnd Mat type is Vec2b.
+*
 */
-CV_EXPORTS_W std::vector<StStep> planSparseTableConstr(
-    std::vector<std::vector<std::vector<Point>>> stNodeMap, int rowLim, int colLim,
-    StStrategy strategy = Faster);
+CV_EXPORTS_W Mat planSparseTableConstr(
+    std::vector<std::vector<std::vector<Point>>> stNodeMap, int rowLim, int colLim);
 
 CV_EXPORTS_W int log2(int n);
 CV_EXPORTS_W int longestRowRunLength(const Mat& kernel);

@@ -287,7 +287,7 @@ TEST(ximgproc_StMorph_private, feature_P2RCov_visualize) {
 #pragma region planning
 
 void VisualizePlanning(
-    std::vector<std::vector<std::vector<Point>>> map, std::vector<stMorph::StStep> res)
+    std::vector<std::vector<std::vector<Point>>> map, Mat res)
 {
     int g = 30;
     int r = map.size();
@@ -302,16 +302,23 @@ void VisualizePlanning(
                 cv::rectangle(m, nodeRect, Scalar(20, 20, 255), -1);
         }
     }
-    for (int i = 0; i < res.size(); i++)
+    for (int r = 0; r < res.rows; r++)
     {
-        auto edge = res[i];
-        Point sp(edge.dimCol * g + g / 2, edge.dimRow * g + g / 2);
-        Point ep;
-        if (edge.ax == stMorph::Dim::Row)
-            ep = Point(edge.dimCol * g + g / 2, (edge.dimRow + 1) * g + g / 2);
-        else
-            ep = Point((edge.dimCol + 1) * g + g / 2, edge.dimRow * g + g / 2);
-        cv::line(m, sp, ep, Scalar(100, 100, 100), 2);
+        for (int c = 0; c < res.cols; c++)
+        {
+            Vec2b p = res.at<Vec2b>(r, c);
+            Point sp(c * g + g / 2, r * g + g / 2);
+            if (p[0] == 1)
+            {
+                Point ep = Point(c * g + g / 2, (r + 1) * g + g / 2);
+                cv::line(m, sp, ep, Scalar(100, 100, 100), 2);
+            }
+            if (p[1] == 1)
+            {
+                Point ep = Point((c + 1) *g + g / 2, r * g + g / 2);
+                cv::line(m, sp, ep, Scalar(100, 100, 100), 2);
+            }
+        }
     }
 #if 0
     imshow("Map", m);
@@ -335,7 +342,7 @@ void feture_planning(const Mat& mat)
         }
     }
 
-    auto r = stMorph::planSparseTableConstr(map, mat.rows, mat.cols, stMorph::StStrategy::Faster);
+    auto r = stMorph::planSparseTableConstr(map, mat.rows, mat.cols);
     VisualizePlanning(map, r);
 }
 TEST(ximgproc_StMorph_private, planning1) { feture_planning(knAsymm()); }

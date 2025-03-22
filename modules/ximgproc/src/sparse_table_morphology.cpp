@@ -4,8 +4,8 @@
 
 #include "precomp.hpp"
 #include <limits>
-#include <vector>
 #include <utility>
+#include <vector>
 
 namespace cv {
 namespace stMorph {
@@ -93,8 +93,6 @@ std::vector<Point> findSeeds(const Mat& stNode, int rowDepth, int colDepth)
     return p2Rects;
 }
 
-// Generate list of rectangles whose width and height are power of 2.
-// (The width and height values of returned rects ​​are the log2 of the actual values.)
 std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
     const Mat& kernel, int rowDepthLim, int colDepthLim)
 {
@@ -127,85 +125,107 @@ std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
     return p2Rects;
 }
 
-std::vector<StStep> planSparseTableConstr(
-    std::vector<std::vector<std::vector<Point>>> pow2Rects, int rowDepthLim, int colDepthLim,
-    StStrategy strategy)
+Mat SolveRSAPGreedy(const Mat& initialMap)
 {
-    // list up required sparse table nodes.
-    std::vector<std::vector<bool>> sparseMatMap(rowDepthLim, std::vector<bool>(colDepthLim, false));
-    for (int r = 0; r < pow2Rects.size(); r++)
-    {
-        for (int c = 0; c < pow2Rects[r].size(); c++)
-        {
-            if (pow2Rects[r][c].size() > 0) sparseMatMap[r][c] = true;
-        }
-    }
-    sparseMatMap[0][0] = true;
+    /*
+    * Solves the rectilinear steiner arborescence problem
+    * https://link.springer.com/article/10.1007/BF01758762
+    */
+    CV_Assert(initialMap.type() == CV_8UC1);
+    std::vector<Point> pos;
+    for (int r = 0; r < initialMap.rows; r++)
+        for (int c = 0; c < initialMap.cols; c++)
+            if (initialMap.at<uchar>(r, c) == 1) pos.emplace_back(c, r);
+    Mat resMap = Mat::zeros(initialMap.size(), CV_8UC2);
 
-    switch (strategy)
+    while (pos.size() > 1)
     {
-    case Faster:
-    {
-        /*
-        *
-        * AtCoder: https://atcoder.jp/contests/ahc037/tasks/ahc037_a
-        *
-        * The rectilinear steiner arborescence problem
-        * https://link.springer.com/article/10.1007/BF01758762
-        *
-        */
-        std::vector<Point> pos;
-        for (int r = 0; r < sparseMatMap.size(); r++)
-            for (int c = 0; c < sparseMatMap[r].size(); c++)
-                if (sparseMatMap[r][c]) pos.emplace_back(c, r);
-        std::vector<StStep> plan;
-        while (pos.size() > 1)
+        int maxCost = -1;
+        int maxI = 0;
+        int maxJ = 0;
+        int maxX = 0;
+        int maxY = 0;
+        for (int i = 0; i < pos.size(); i++)
         {
-            int maxCost = -1;
-            int maxI = 0;
-            int maxJ = 0;
-            int maxX = 0;
-            int maxY = 0;
-            for (int i = 0; i < pos.size(); i++)
+            for (int j = i + 1; j < pos.size(); j++)
             {
-                for (int j = i + 1; j < pos.size(); j++)
+                int _x = std::min(pos[i].x, pos[j].x);
+                int _y = std::min(pos[i].y, pos[j].y);
+                int cost = _x + _y;
+                if (maxCost < cost)
                 {
-                    int _x = std::min(pos[i].x, pos[j].x);
-                    int _y = std::min(pos[i].y, pos[j].y);
-                    int cost = _x + _y;
-                    if (maxCost < cost)
-                    {
-                        maxCost = cost;
-                        maxI = i;
-                        maxJ = j;
-                        maxX = _x;
-                        maxY = _y;
-                    }
+                    maxCost = cost;
+                    maxI = i;
+                    maxJ = j;
+                    maxX = _x;
+                    maxY = _y;
                 }
             }
-            for (int col = pos[maxI].x - 1; col >= maxX; col--)
-                plan.emplace_back(Fill, pos[maxI].y, col, Dim::Col, pow2Rects[pos[maxI].y][col]);
-            for (int row = pos[maxI].y - 1; row >= maxY; row--)
-                plan.emplace_back(Fill, row, maxX, Dim::Row, pow2Rects[row][maxX]);
-            for (int col = pos[maxJ].x - 1; col >= maxX; col--)
-                plan.emplace_back(Fill, pos[maxJ].y, col, Dim::Col, pow2Rects[pos[maxJ].y][col]);
-            for (int row = pos[maxJ].y - 1; row >= maxY; row--)
-                plan.emplace_back(Fill, row, maxX, Dim::Row, pow2Rects[row][maxX]);
-
-            pos[maxI] = Point(maxX, maxY);
-            swap(pos[maxJ], pos[pos.size() - 1]);
-            pos.pop_back();
         }
+        for (int col = pos[maxI].x - 1; col >= maxX; col--)
+            resMap.at<Vec2b>(pos[maxI].y, col)[1] = 1;
+        for (int row = pos[maxI].y - 1; row >= maxY; row--)
+            resMap.at<Vec2b>(row, maxX)[0] = 1;
+        for (int col = pos[maxJ].x - 1; col >= maxX; col--)
+            resMap.at<Vec2b>(pos[maxJ].y, col)[1] = 1;
+        for (int row = pos[maxJ].y - 1; row >= maxY; row--)
+            resMap.at<Vec2b>(row, maxX)[0] = 1;
 
-        reverse(plan.begin(), plan.end());
-        return plan;
+        pos[maxI] = Point(maxX, maxY);
+        swap(pos[maxJ], pos[pos.size() - 1]);
+        pos.pop_back();
     }
-    case StStrategy::SaveMemory:
+    return resMap;
+}
+
+Mat planSparseTableConstr(
+    std::vector<std::vector<std::vector<Point>>> pow2Rects, int rowDepthLim, int colDepthLim)
+{
+    // list up required sparse table nodes.
+    Mat stMap = Mat::zeros(rowDepthLim, colDepthLim, CV_8UC1);
+    for (int rd = 0; rd < rowDepthLim; rd++)
+        for (int cd = 0; cd < colDepthLim; cd++)
+            if (pow2Rects[rd][cd].size() > 0)
+                stMap.at<uchar>(rd, cd) = 1;
+    stMap.at<uchar>(0, 0) = 1;
+    Mat path = SolveRSAPGreedy(stMap);
+    return path;
+}
+
+void morphDfs(int minmax, Mat& st, Mat& dst,
+    std::vector<std::vector<std::vector<Point>>> row2Rects, const Mat& stPlan,
+    int rowDepth, int colDepth)
+{
+    for (Point p : row2Rects[rowDepth][colDepth])
     {
-        // todo: implement.
-        std::vector<StStep> plan;
-        return plan;
+        Rect rect(p, dst.size());
+        if (minmax == Op::Min) cv::min(dst, st(rect), dst);
+        else cv::max(dst, st(rect), dst);
     }
+
+    // Fill col-direction first.
+    if (stPlan.at<Vec2b>(rowDepth, colDepth)[1] == 1)
+    {
+        // col direction
+        Mat st2 = st;
+        int ofs = 1 << colDepth;
+        Rect rect1(0, 0, st2.cols - ofs, st2.rows);
+        Rect rect2(ofs, 0, st2.cols - ofs, st2.rows);
+
+        if (minmax == Op::Min) cv::min(st2(rect1), st2(rect2), st2);
+        else cv::max(st2(rect1), st2(rect2), st2);
+        morphDfs(minmax, st2, dst, row2Rects, stPlan, rowDepth, colDepth + 1);
+    }
+    if (stPlan.at<Vec2b>(rowDepth, colDepth)[0] == 1)
+    {
+        // row direction
+        int ofs = 1 << rowDepth;
+        Rect rect1(0, 0, st.cols, st.rows - ofs);
+        Rect rect2(0, ofs, st.cols, st.rows - ofs);
+
+        if (minmax == Op::Min) cv::min(st(rect1), st(rect2), st);
+        else cv::max(st(rect1), st(rect2), st);
+        morphDfs(minmax, st, dst, row2Rects, stPlan, rowDepth + 1, colDepth);
     }
 }
 
@@ -221,8 +241,8 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
     int colDepthLim = log2(longestColRunLength(_kernel)) + 1;
     std::vector<std::vector<std::vector<Point>>> pow2Rects
         = genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
-    std::vector<StStep> stPlan
-        = planSparseTableConstr(pow2Rects, rowDepthLim, colDepthLim, Faster);
+    Mat stPlan
+        = planSparseTableConstr(pow2Rects, rowDepthLim, colDepthLim);
 
     Mat src = _src.getMat();
     _dst.create(_src.size(), _src.type());
@@ -239,53 +259,8 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
             anchor.y, _kernel.cols - 1 - anchor.y,
             anchor.x, _kernel.rows - 1 - anchor.x,
             borderType, bV);
-
         dst.setTo(nil);
-
-        // TODO: keep only needed memories.
-        std::vector<std::vector<Mat>> st(rowDepthLim, std::vector<Mat>(colDepthLim));
-        st[0][0] = expandedSrc;
-        for (int i = 0; i < stPlan.size(); i++)
-        {
-            StStep step = stPlan[i];
-            Mat& curr = st[step.dimRow][step.dimCol];
-            Mat* dst1;
-            int ofsX = 0, ofsY = 0;
-            if (step.ax == Dim::Col)
-            {
-                ofsX = 1 << step.dimCol;
-                dst1 = &st[step.dimRow][step.dimCol + 1];
-            }
-            else
-            {
-                ofsY = 1 << step.dimRow;
-                dst1 = &st[step.dimRow + 1][step.dimCol];
-            }
-            int width = curr.cols - ofsX;
-            int height = curr.rows - ofsY;
-            Mat& src1 = st[step.dimRow][step.dimCol](Rect(0, 0, width, height));
-            Mat& src2 = st[step.dimRow][step.dimCol](Rect(ofsX, ofsY, width, height));
-            dst1->create(height, width, curr.type());
-            if (minmax == Op::Min) cv::min(src1, src2, *dst1);
-            else cv::max(src1, src2, *dst1);
-        }
-
-        // result constructioin
-        for (int r = 0; r < pow2Rects.size(); r++)
-        {
-            for (int c = 0; c < pow2Rects[r].size(); c++)
-            {
-                for (Point p : pow2Rects[r][c])
-                {
-                    Rect rect(p, Size(1 << c, 1 << r));
-                    Rect srcRect(p, dst.size());
-                    Mat& srcMat = st[r][c](srcRect);
-                    if (minmax == Op::Min) cv::min(dst, srcMat, dst);
-                    else cv::max(dst, srcMat, dst);
-                }
-            }
-        }
-
+        morphDfs(minmax, expandedSrc, dst, pow2Rects, stPlan, 0, 0);
         src = dst;
     } while (--iterations > 0);
 }
