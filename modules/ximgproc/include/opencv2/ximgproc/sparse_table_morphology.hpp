@@ -8,8 +8,7 @@
 #include <opencv2/core.hpp>
 #include <vector>
 
-namespace cv {
-namespace stMorph {
+namespace cv { namespace stMorph {
 
 //! @addtogroup imgproc_filter
 //! @{
@@ -84,22 +83,6 @@ CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
 
 //! @}
 
-// normalizeAnchor; Copied from filterengine.hpp.
-static inline Point normalizeAnchor(Point anchor, Size ksize)
-{
-    if (anchor.x == -1)
-        anchor.x = ksize.width / 2;
-    if (anchor.y == -1)
-        anchor.y = ksize.height / 2;
-    CV_Assert(anchor.inside(Rect(0, 0, ksize.width, ksize.height)));
-    return anchor;
-}
-
-enum Op
-{
-    Min, Max
-};
-
 /*
 * Find a set of power-2-rectangles to cover the kernel.
 * power-2-rectangles is a rectangle whose height and width are both power of 2.
@@ -120,8 +103,7 @@ CV_EXPORTS_W int log2(int n);
 CV_EXPORTS_W int longestRowRunLength(const Mat& kernel);
 CV_EXPORTS_W int longestColRunLength(const Mat& kernel);
 
-}} // cv::stMorph::
-
+}}
 #endif
 
 /*
