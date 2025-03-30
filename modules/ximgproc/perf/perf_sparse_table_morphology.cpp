@@ -5,62 +5,36 @@
 #include "perf_precomp.hpp"
 
 namespace opencv_test {
-namespace stMorph {
+namespace {
 
-typedef tuple<int, Size, int> STParams;
+typedef tuple<MorphTypes, MorphShapes> MorphTypes_MorphShapes_t;
+typedef TestBaseWithParam<MorphTypes_MorphShapes_t> SparseTableMorphologyPerfTest;
 
-typedef TestBaseWithParam<STParams> STMorphologyPerfTest;
-
-TEST(Typical_Erode, small)
+PERF_TEST_P(SparseTableMorphologyPerfTest, perf,
+    testing::Combine(
+        testing::Values(
+            MORPH_ERODE, MORPH_DILATE, MORPH_OPEN, MORPH_CLOSE,
+            MORPH_GRADIENT, MORPH_TOPHAT, MORPH_BLACKHAT),
+        testing::Values(MORPH_RECT, MORPH_CROSS, MORPH_ELLIPSE)
+    ) )
 {
+    MorphTypes_MorphShapes_t params = GetParam();
+    int seSize = 51;
+    Size sz = sz1080p;
+    MorphTypes op = std::tr1::get<0>(params);
+    MorphShapes knType = std::tr1::get<1>(params);
 
-}
+    Mat src(sz, CV_8UC3), dst(sz, CV_8UC3);
+    Mat kernel = getStructuringElement(knType, cv::Size(2 * seSize + 1, 2 * seSize + 1));
 
-PERF_TEST_P(STMorphologyPerfTest, perf, Combine(Values(1,7, 21), Values(sz720p, sz2160p),
-    Values(MORPH_ERODE, MORPH_DILATE, MORPH_OPEN, MORPH_CLOSE, MORPH_GRADIENT,MORPH_TOPHAT, MORPH_BLACKHAT)))
-{
-    STParams params = GetParam();
-    int seSize = get<0>(params);
-    Size sz = get<1>(params);
-    int op = get<2>(params);
+    declare.in(src, WARMUP_RNG).out(dst);
 
-    Mat src(sz, CV_8U);
-    Mat thresholded, dstRLE;
-    Mat se = rl::getStructuringElement(MORPH_ELLIPSE, cv::Size(2 * seSize + 1, 2 * seSize + 1));
-
-    declare.in(src, WARMUP_RNG);
-
-    TEST_CYCLE_N(4)
+    TEST_CYCLE_N(5)
     {
-        rl::threshold(src, thresholded, 100.0, THRESH_BINARY);
-        rl::morphologyEx(thresholded, dstRLE, op, se);
+        cv::stMorph::morphologyEx(src, dst, op, kernel);
     }
 
     SANITY_CHECK_NOTHING();
 }
 
-typedef tuple<int, Size> STErodeParams;
-typedef TestBaseWithParam<STErodeParams> STErodePerfTest;
-PERF_TEST_P(STErodePerfTest, perf, Combine(Values(1, 7, 21), Values(sz720p, sz2160p)))
-{
-    STErodeParams params = GetParam();
-    int seSize = get<0>(params);
-    Size sz = get<1>(params);
-
-    Mat src(sz, CV_8U);
-    Mat thresholded, dstRLE;
-    Mat se = rl::getStructuringElement(MORPH_ELLIPSE, cv::Size(2 * seSize + 1, 2 * seSize + 1));
-
-    declare.in(src, WARMUP_RNG);
-
-    TEST_CYCLE_N(4)
-    {
-        rl::threshold(src, thresholded, 100.0, THRESH_BINARY);
-        rl::erode(thresholded, dstRLE, se);
-    }
-
-    SANITY_CHECK_NOTHING();
-}
-
-} // st
-} // morphology
+}} // opencv_test:: ::
