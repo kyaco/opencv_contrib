@@ -391,4 +391,4 @@ TEST(ximgproc_StMorph_comp, 5_cvErode) { cvErode(im(CV_8UC3), knOnes()); }
 
 #pragma endregion
 
-}} // ::opencv_test::
+}} // opencv_test:: ::

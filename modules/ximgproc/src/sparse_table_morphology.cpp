@@ -7,7 +7,8 @@
 #include <utility>
 #include <vector>
 
-namespace cv { namespace stMorph {
+namespace cv {
+namespace stMorph {
 
 // normalizeAnchor; Copied from filterengine.hpp.
 static inline Point normalizeAnchor(Point anchor, Size ksize)
@@ -430,4 +431,4 @@ void morphologyEx(InputArray src, OutputArray dst, int op,
     }
 }
 
-}}
+}} // cv::stMorph::

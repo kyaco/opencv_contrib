@@ -8,7 +8,8 @@
 #include <opencv2/core.hpp>
 #include <vector>
 
-namespace cv { namespace stMorph {
+namespace cv {
+namespace stMorph {
 
 //! @addtogroup imgproc_filter
 //! @{
@@ -103,7 +104,7 @@ CV_EXPORTS_W int log2(int n);
 CV_EXPORTS_W int longestRowRunLength(const Mat& kernel);
 CV_EXPORTS_W int longestColRunLength(const Mat& kernel);
 
-}}
+}} // cv::stMorph::
 #endif
 
 /*
