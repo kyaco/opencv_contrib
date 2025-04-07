@@ -79,7 +79,7 @@ int longestColRunLength(const Mat& kernel)
     return maxLen;
 }
 
-std::vector<Point> findSeeds(const Mat& stNode, int rowDepth, int colDepth)
+std::vector<Point> findP2RectCorners(const Mat& stNode, int rowDepth, int colDepth)
 {
     int rowOfst = 1 << rowDepth;
     int colOfst = 1 << colDepth;
@@ -97,7 +97,7 @@ std::vector<Point> findSeeds(const Mat& stNode, int rowDepth, int colDepth)
             if (row > 0 && stNode.at<uchar>(row - 1, col) == 1
                 && row + 1 < stNode.rows && stNode.at<uchar>(row + 1, col) == 1) continue;
 
-            // zignore if neighboring block is white; will be alive in deeper table
+            // ignore if neighboring block is white
             if (col + colOfst < stNode.cols && stNode.at<uchar>(row, col + colOfst) == 1) continue;
             if (col - colOfst >= 0 && stNode.at<uchar>(row, col - colOfst) == 1) continue;
             if (row + rowOfst < stNode.rows && stNode.at<uchar>(row + rowOfst, col) == 1) continue;
@@ -109,34 +109,36 @@ std::vector<Point> findSeeds(const Mat& stNode, int rowDepth, int colDepth)
     return p2Rects;
 }
 
+/*
+* Find a set of power-2-rectangles to cover the kernel.
+* power-2-rectangles is a rectangle whose height and width are both power of 2.
+*/
 std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
     const Mat& kernel, int rowDepthLim, int colDepthLim)
 {
     CV_Assert(kernel.type() == CV_8UC1);
 
     std::vector<std::vector<std::vector<Point>>> p2Rects;
-    Mat stCache = kernel;
+    Mat stNodeCache = kernel;
     for (int rowDepth = 0; rowDepth < rowDepthLim; rowDepth++)
     {
-        Mat st = stCache.clone();
+        Mat stNode = stNodeCache.clone();
         p2Rects.emplace_back(std::vector<std::vector<Point>>());
         for (int colDepth = 0; colDepth < colDepthLim; colDepth++)
         {
-            p2Rects[rowDepth].emplace_back(findSeeds(st, rowDepth, colDepth));
+            p2Rects[rowDepth].emplace_back(findP2RectCorners(stNode, rowDepth, colDepth));
             int colStep = 1 << colDepth;
-            if (st.cols - colStep < 0) break;
-            Rect s1(0, 0, st.cols - colStep, st.rows);
-            Rect s2(colStep, 0, st.cols - colStep, st.rows);
-            cv::min(st(s1), st(s2), st);
+            if (stNode.cols - colStep < 0) break;
+            Rect s1(0, 0, stNode.cols - colStep, stNode.rows);
+            Rect s2(colStep, 0, stNode.cols - colStep, stNode.rows);
+            cv::min(stNode(s1), stNode(s2), stNode);
         }
         int rowStep = 1 << rowDepth;
-        if (stCache.rows - rowStep < 0) break;
-        Rect s1(0, 0, stCache.cols, stCache.rows - rowStep);
-        Rect s2(0, rowStep, stCache.cols, stCache.rows - rowStep);
-        cv::min(stCache(s1), stCache(s2), stCache);
+        if (stNodeCache.rows - rowStep < 0) break;
+        Rect s1(0, 0, stNodeCache.cols, stNodeCache.rows - rowStep);
+        Rect s2(0, rowStep, stNodeCache.cols, stNodeCache.rows - rowStep);
+        cv::min(stNodeCache(s1), stNodeCache(s2), stNodeCache);
     }
-
-    // todo: implement greedy algorithm to minimize the rectangle set covering the kernel.
 
     return p2Rects;
 }
@@ -144,8 +146,11 @@ std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
 Mat SolveRSAPGreedy(const Mat& initialMap)
 {
     /*
-    * Solves the rectilinear steiner arborescence problem
+    * Solves the rectilinear steiner arborescence problem greedy.
     * https://link.springer.com/article/10.1007/BF01758762
+    *
+    * Following implementation is O(n^3)-time algorithm
+    * which is different from the mothod proposed in the paper.
     */
     CV_Assert(initialMap.type() == CV_8UC1);
     std::vector<Point> pos;
@@ -194,9 +199,16 @@ Mat SolveRSAPGreedy(const Mat& initialMap)
     return resMap;
 }
 
-Mat planSparseTableConstr(
+Mat sparseTableFillPlanning(
     std::vector<std::vector<std::vector<Point>>> pow2Rects, int rowDepthLim, int colDepthLim)
 {
+    /*
+    * Plan the order to fill the required 2d-sparse-table nodes.
+    * The type of returned mat is Vec2b.
+    * if path[dr][dc][0] == 1 then st[dr+1][dc] will be calculated from st[dr][dc].
+    * if path[dr][dc][1] == 1 then st[dr][dc+1] will be calculated from st[dr][dc].
+    */
+
     // list up required sparse table nodes.
     Mat stMap = Mat::zeros(rowDepthLim, colDepthLim, CV_8UC1);
     for (int rd = 0; rd < rowDepthLim; rd++)
@@ -219,7 +231,6 @@ void morphDfs(int minmax, Mat& st, Mat& dst,
         else cv::max(dst, st(rect), dst);
     }
 
-    // Fill col-direction first.
     if (stPlan.at<Vec2b>(rowDepth, colDepth)[1] == 1)
     {
         // col direction
@@ -258,7 +269,7 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
     std::vector<std::vector<std::vector<Point>>> pow2Rects
         = genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
     Mat stPlan
-        = planSparseTableConstr(pow2Rects, rowDepthLim, colDepthLim);
+        = sparseTableFillPlanning(pow2Rects, rowDepthLim, colDepthLim);
 
     Mat src = _src.getMat();
     _dst.create(_src.size(), _src.type());

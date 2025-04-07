@@ -84,20 +84,9 @@ CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
 
 //! @}
 
-/*
-* Find a set of power-2-rectangles to cover the kernel.
-* power-2-rectangles is a rectangle whose height and width are both power of 2.
-* (The width and height values of returned rects ​​are the log2 of the actual values.)
-*/
 CV_EXPORTS_W std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
     const Mat& kernel, int rowLim, int colLim);
-//
-/*
-* Plan the order to fill the required sparse table nodes.
-* returnd Mat type is Vec2b.
-*
-*/
-CV_EXPORTS_W Mat planSparseTableConstr(
+CV_EXPORTS_W Mat sparseTableFillPlanning(
     std::vector<std::vector<std::vector<Point>>> stNodeMap, int rowLim, int colLim);
 
 CV_EXPORTS_W int log2(int n);
@@ -106,26 +95,3 @@ CV_EXPORTS_W int longestColRunLength(const Mat& kernel);
 
 }} // cv::stMorph::
 #endif
-
-/*
-
-About sparse table:
-https://qiita.com/recuraki/items/0fcbc9e2abbc4fae5f62
-https://www.geeksforgeeks.org/sparse-table/
-
-2D-sparse table:
-https://kopricky.github.io/code/DataStructure_Advanced/sparse_table_2D.html
-https://www.geeksforgeeks.org/2d-range-minimum-query-in-o1/
-
-With 2D sparse table, we can get the min or max value in each power-of-2 rectangle quickly.
-
-
-1. Find a set of power-of-2 rectangles which covers the kernel.
-2. Group the rectangles by the size.
-3. Fill the sparse table
-
-https://gobi-tk.hatenablog.com/entry/2024/09/18/012709
-https://link.springer.com/article/10.1007/BF01758762
-
-
-*/

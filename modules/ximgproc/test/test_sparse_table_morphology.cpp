@@ -14,14 +14,14 @@ namespace {
 void assertArraysIdentical(InputArray ary1, InputArray ary2)
 {
     Mat xor = ary1.getMat() ^ ary2.getMat();
-    ASSERT_EQ(cv::countNonZero(xor.reshape(1)), 0);
+    CV_Assert(cv::countNonZero(xor.reshape(1)) == 0);
 }
 Mat im(int type)
 {
     int depth = CV_MAT_DEPTH(type);
     int ch = CV_MAT_CN(type);
     Mat img = imread(cvtest::TS::ptr()->get_data_path() + "cv/shared/lena.png");
-    // ASSERT_EQ(img.type(), CV_8UC3);
+    CV_Assert(img.type() == CV_8UC3);
 
     if (ch == 1) cv::cvtColor(img, img, ColorConversionCodes::COLOR_BGR2GRAY, ch);
     if (depth == CV_8S) img /= 2;
@@ -342,7 +342,7 @@ void feture_planning(const Mat& mat)
         }
     }
 
-    auto r = stMorph::planSparseTableConstr(map, mat.rows, mat.cols);
+    auto r = stMorph::sparseTableFillPlanning(map, mat.rows, mat.cols);
     VisualizePlanning(map, r);
 }
 TEST(ximgproc_StMorph_private, planning1) { feture_planning(knAsymm()); }
