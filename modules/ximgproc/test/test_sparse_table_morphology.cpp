@@ -388,7 +388,83 @@ TEST(ximgproc_StMorph_comp, 5_stDilate) { stDilate(im(CV_8UC3), knOnes()); }
 TEST(ximgproc_StMorph_comp, 5_stEerode) { stErode(im(CV_8UC3), knOnes()); }
 TEST(ximgproc_StMorph_comp, 5_cvDilate) { cvDilate(im(CV_8UC3), knOnes()); }
 TEST(ximgproc_StMorph_comp, 5_cvErode) { cvErode(im(CV_8UC3), knOnes()); }
+TEST(ximgproc_StMorph_comp, 5_cvEErode) { cvErode(im(CV_8UC3), kn5()); }
 
+TEST(ximgproc_StMorph_eval, erode)
+{
+    Mat img = im(CV_8UC3);
+    Mat dst;
+    int sizes[]{ 3, 5, 7, 9, 11, 21, 31, 51, 101, 151, 201, 251, 301, 351, 401, 451, 501};
+
+    std::ofstream ss("opencvlog.txt", std::ios_base::out);
+
+    ss << "----RECT----" << endl;
+    for (int i : sizes)
+    {
+        ss << i;
+        Size sz(i, i);
+        cv::TickMeter meter;
+        Mat kn;
+
+        // cv-rect
+        kn = getStructuringElement(MORPH_RECT, sz);
+        if (i <= 1001)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+        }
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // cv-cross
+        kn = getStructuringElement(MORPH_CROSS, sz);
+        if (i <= 1001)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+        }
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // cv-ellipse
+        kn = getStructuringElement(MORPH_ELLIPSE, sz);
+        if (i <= 201)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+        }
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // st-rect
+        kn = getStructuringElement(MORPH_RECT, sz);
+        meter.start();
+        stMorph::erode(img, dst, kn);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // st-cross
+        kn = getStructuringElement(MORPH_CROSS, sz);
+        meter.start();
+        stMorph::erode(img, dst, kn);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // st-ellipse
+        kn = getStructuringElement(MORPH_ELLIPSE, sz);
+        meter.start();
+        stMorph::erode(img, dst, kn);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli() << endl;
+        meter.reset();
+    }
+    ss.close();
+}
 #pragma endregion
 
 }} // opencv_test:: ::
