@@ -257,19 +257,10 @@ void morphDfs(int minmax, Mat& st, Mat& dst,
 }
 
 template <typename T>
-void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
-    Point anchor, int iterations,
-    int borderType, const Scalar& borderVal)
+void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
+    BorderTypes borderType, const Scalar& borderVal)
 {
     T nil = (minmax == Op::Min) ? std::numeric_limits<T>::max() : std::numeric_limits<T>::min();
-
-    Mat _kernel = kernel.getMat();
-    int rowDepthLim = log2(longestRowRunLength(_kernel)) + 1;
-    int colDepthLim = log2(longestColRunLength(_kernel)) + 1;
-    std::vector<std::vector<std::vector<Point>>> pow2Rects
-        = genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
-    Mat stPlan
-        = sparseTableFillPlanning(pow2Rects, rowDepthLim, colDepthLim);
 
     Mat src = _src.getMat();
     _dst.create(_src.size(), _src.type());
@@ -283,92 +274,99 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray kernel,
     {
         Mat expandedSrc;
         copyMakeBorder(src, expandedSrc,
-            anchor.y, _kernel.cols - 1 - anchor.y,
-            anchor.x, _kernel.rows - 1 - anchor.x,
+            kdi.anchor.y, kdi.cols - 1 - kdi.anchor.y,
+            kdi.anchor.x, kdi.rows - 1 - kdi.anchor.x,
             borderType, bV);
         dst.setTo(nil);
-        morphDfs(minmax, expandedSrc, dst, pow2Rects, stPlan, 0, 0);
+        morphDfs(minmax, expandedSrc, dst, kdi.stRects, kdi.plan, 0, 0);
         src = dst;
-    } while (--iterations > 0);
+    } while (--kdi.iterations > 0);
 }
 
-void morphOp(Op minmax, InputArray _src, OutputArray _dst, InputArray _kernel,
-    Point anchor, int iterations,
-    int borderType, const Scalar& borderVal)
+void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
+    BorderTypes borderType, const Scalar& borderVal)
 {
-    Mat kernel = _kernel.getMat();
-    if (iterations == 0 || kernel.rows * kernel.cols == 1)
+    if (kdi.iterations == 0 || kdi.rows * kdi.cols == 1)
     {
         _src.copyTo(_dst);
         return;
     }
-    // Fix kernel in case of it is empty.
-    if (kernel.empty())
-    {
-        kernel = getStructuringElement(MORPH_RECT, Size(1 + iterations * 2, 1 + iterations * 2));
-        anchor = Point(iterations, iterations);
-        iterations = 1;
-    }
-    if (countNonZero(kernel) == 0)
-    {
-        kernel.at<uchar>(0, 0) = 1;
-    }
-    // Fix anchor to the center of the kernel.
-    anchor = stMorph::normalizeAnchor(anchor, kernel.size());
 
     switch (_src.depth())
     {
     case CV_8U:
-        morphOp<uchar>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
+        morphOp<uchar>(minmax, _src, _dst, kdi, borderType, borderVal);
         return;
     case CV_8S:
-        morphOp<char>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
+        morphOp<char>(minmax, _src, _dst, kdi, borderType, borderVal);
         return;
     case CV_16U:
-        morphOp<ushort>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
+        morphOp<ushort>(minmax, _src, _dst, kdi, borderType, borderVal);
         return;
     case CV_16S:
-        morphOp<short>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
+        morphOp<short>(minmax, _src, _dst, kdi, borderType, borderVal);
         return;
     case CV_32S:
-        morphOp<int>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
+        morphOp<int>(minmax, _src, _dst, kdi, borderType, borderVal);
         return;
     case CV_32F:
-        morphOp<float>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
+        morphOp<float>(minmax, _src, _dst, kdi, borderType, borderVal);
         return;
     case CV_64F:
-        morphOp<double>(minmax, _src, _dst, kernel, anchor, iterations, borderType, borderVal);
+        morphOp<double>(minmax, _src, _dst, kdi, borderType, borderVal);
         return;
     }
 }
 
-void dilate(InputArray src, OutputArray dst, InputArray kernel,
-    Point anchor, int iterations,
-    int borderType, const Scalar& borderVal)
+kernelDecompInfo getKernelDecompInfo(InputArray kernel, Point anchor, int iterations)
 {
-    morphOp(Op::Max, src, dst, kernel, anchor, iterations, borderType, borderVal);
+    Mat _kernel = kernel.getMat();
+    // Fix kernel in case of it is empty.
+    if (_kernel.empty())
+    {
+        _kernel = getStructuringElement(MORPH_RECT, Size(1 + iterations * 2, 1 + iterations * 2));
+        anchor = Point(iterations, iterations);
+        iterations = 1;
+    }
+    if (countNonZero(_kernel) == 0)
+    {
+        _kernel.at<uchar>(0, 0) = 1;
+    }
+    // Fix anchor to the center of the kernel.
+    anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
+
+
+    int rowDepthLim = log2(longestRowRunLength(_kernel)) + 1;
+    int colDepthLim = log2(longestColRunLength(_kernel)) + 1;
+    std::vector<std::vector<std::vector<Point>>> pow2Rects
+        = genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
+
+    Mat stPlan
+        = sparseTableFillPlanning(pow2Rects, rowDepthLim, colDepthLim);
+
+    anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
+
+    return { _kernel.rows, _kernel.cols, pow2Rects, stPlan, anchor, iterations };
 }
 
-void erode(InputArray src, OutputArray dst, InputArray kernel,
-    Point anchor, int iterations,
-    int borderType, const Scalar& borderVal)
+void erode(InputArray src, OutputArray dst, kernelDecompInfo kdi,
+    BorderTypes borderType, const Scalar& borderVal)
 {
-    morphOp(Op::Min, src, dst, kernel, anchor, iterations, borderType, borderVal);
+    morphOp(Op::Min, src, dst, kdi, borderType, borderVal);
 }
 
-void morphologyEx(InputArray src, OutputArray dst, int op,
-    InputArray kernel, Point anchor, int iterations,
-    int borderType, const Scalar& borderVal)
+void dilate(InputArray src, OutputArray dst, kernelDecompInfo kdi,
+    BorderTypes borderType, const Scalar& borderVal)
+{
+    morphOp(Op::Max, src, dst, kdi, borderType, borderVal);
+}
+
+void morphologyEx(InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
+    BorderTypes borderType, const Scalar& borderVal)
 {
     CV_INSTRUMENT_REGION();
 
     CV_Assert(!src.empty());
-
-    Mat _kernel = kernel.getMat();
-    if (_kernel.empty())
-    {
-        _kernel = getStructuringElement(MORPH_RECT, Size(3, 3), Point(1, 1));
-    }
 
     Mat _src = src.getMat(), temp;
     dst.create(_src.size(), _src.type());
@@ -377,69 +375,75 @@ void morphologyEx(InputArray src, OutputArray dst, int op,
     switch (op)
     {
     case MORPH_ERODE:
-        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderVal);
+        erode(src, dst, kdi, borderType, borderVal);
         break;
     case MORPH_DILATE:
-        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderVal);
+        dilate(src, dst, kdi, borderType, borderVal);
         break;
     case MORPH_OPEN:
-        stMorph::erode(src, dst, kernel, anchor, iterations, borderType, borderVal);
-        stMorph::dilate(dst, dst, kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(src, dst, kdi, borderType, borderVal);
+        stMorph::dilate(dst, dst, kdi, borderType, borderVal);
         break;
     case MORPH_CLOSE:
-        stMorph::dilate(src, dst, kernel, anchor, iterations, borderType, borderVal);
-        stMorph::erode(dst, dst, kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(src, dst, kdi, borderType, borderVal);
+        stMorph::erode(dst, dst, kdi, borderType, borderVal);
         break;
     case MORPH_GRADIENT:
-        stMorph::erode(_src, temp, _kernel, anchor, iterations, borderType, borderVal);
-        stMorph::dilate(_src, _dst, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(_src, temp, kdi, borderType, borderVal);
+        stMorph::dilate(_src, _dst, kdi, borderType, borderVal);
         _dst -= temp;
         break;
     case MORPH_TOPHAT:
         if (_src.data != _dst.data)
             temp = _dst;
-        stMorph::erode(_src, temp, _kernel, anchor, iterations, borderType, borderVal);
-        stMorph::dilate(temp, temp, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::erode(_src, temp, kdi, borderType, borderVal);
+        stMorph::dilate(temp, temp, kdi, borderType, borderVal);
         _dst = _src - temp;
         break;
     case MORPH_BLACKHAT:
         if (_src.data != _dst.data)
             temp = _dst;
-        stMorph::dilate(_src, temp, _kernel, anchor, iterations, borderType, borderVal);
-        stMorph::erode(temp, temp, _kernel, anchor, iterations, borderType, borderVal);
+        stMorph::dilate(_src, temp, kdi, borderType, borderVal);
+        stMorph::erode(temp, temp, kdi, borderType, borderVal);
         _dst = temp - _src;
         break;
     case MORPH_HITMISS:
-        CV_Assert(_src.type() == CV_8UC1);
-        if (countNonZero(_kernel) <= 0)
-        {
-            _src.copyTo(_dst);
-            break;
-        }
-        {
-            Mat k1, k2, e1, e2;
-            k1 = (_kernel == 1);
-            k2 = (_kernel == -1);
-
-            if (countNonZero(k1) <= 0)
-                e1 = Mat(_src.size(), _src.type(), Scalar(255));
-            else
-                stMorph::erode(_src, e1, k1, anchor, iterations, borderType, borderVal);
-
-            if (countNonZero(k2) <= 0)
-                e2 = Mat(_src.size(), _src.type(), Scalar(255));
-            else
-            {
-                Mat _src_complement;
-                bitwise_not(_src, _src_complement);
-                stMorph::erode(_src_complement, e2, k2, anchor, iterations, borderType, borderVal);
-            }
-            _dst = e1 & e2;
-        }
-        break;
+        CV_Error(cv::Error::StsBadArg, "stMorph doesn't support HITMISS operation");
     default:
         CV_Error(cv::Error::StsBadArg, "unknown morphological operation");
     }
+}
+
+//------------------------------------------
+void erode(InputArray src, OutputArray dst, InputArray kernel,
+    Point anchor, int iterations,
+    BorderTypes borderType, const Scalar& borderVal)
+{
+    kernelDecompInfo kdi = getKernelDecompInfo(kernel, anchor, iterations);
+    morphOp(Op::Min, src, dst, kdi, borderType, borderVal);
+}
+
+void dilate(InputArray src, OutputArray dst, InputArray kernel,
+    Point anchor, int iterations,
+    BorderTypes borderType, const Scalar& borderVal)
+{
+    kernelDecompInfo kdi = getKernelDecompInfo(kernel, anchor, iterations);
+    morphOp(Op::Max, src, dst, kdi, borderType, borderVal);
+}
+
+void morphologyEx(InputArray src, OutputArray dst, int op,
+    InputArray kernel, Point anchor, int iterations,
+    BorderTypes borderType, const Scalar& borderVal)
+{
+
+    Mat _kernel = kernel.getMat();
+    if (_kernel.empty())
+    {
+        _kernel = getStructuringElement(MORPH_RECT, Size(3, 3), Point(1, 1));
+    }
+
+    kernelDecompInfo kdi = getKernelDecompInfo(_kernel, anchor, iterations);
+    morphologyEx(src, dst, op, kdi, borderType, borderVal);
 }
 
 }} // cv::stMorph::

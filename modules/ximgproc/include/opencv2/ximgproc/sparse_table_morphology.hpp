@@ -32,7 +32,7 @@ namespace stMorph {
  */
 CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
                           Point anchor = Point(-1,-1), int iterations = 1,
-                          int borderType = BORDER_CONSTANT,
+                          BorderTypes borderType = BORDER_CONSTANT,
                           const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
@@ -53,7 +53,7 @@ CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
  */
 CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
                           Point anchor = Point(-1,-1), int iterations = 1,
-                          int borderType = BORDER_CONSTANT,
+                          BorderTypes borderType = BORDER_CONSTANT,
                           const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 /**
@@ -79,7 +79,32 @@ CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
 CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
                                 int op, InputArray kernel,
                                 Point anchor = Point(-1,-1), int iterations = 1,
-                                int borderType = BORDER_CONSTANT,
+                                BorderTypes borderType = BORDER_CONSTANT,
+                                const Scalar& borderValue = morphologyDefaultBorderValue() );
+
+typedef struct _kernelDecompInfo
+{
+    int rows;
+    int cols;
+    std::vector<std::vector<std::vector<Point>>> stRects;
+    Mat plan;
+    Point anchor;
+    int iterations;
+} kernelDecompInfo;
+
+CV_EXPORTS_W kernelDecompInfo getKernelDecompInfo(InputArray kernel,
+                                  Point anchor = Point(-1, -1), int iterations = 1);
+CV_EXPORTS_W void erode( InputArray src, OutputArray dst,
+                     kernelDecompInfo kdi,
+                     BorderTypes borderType = BORDER_CONSTANT,
+                     const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void dilate( InputArray src, OutputArray dst,
+                     kernelDecompInfo kdi,
+                     BorderTypes borderType = BORDER_CONSTANT,
+                     const Scalar& borderValue = morphologyDefaultBorderValue() );
+CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
+                                int op, kernelDecompInfo kdi,
+                                BorderTypes borderType = BORDER_CONSTANT,
                                 const Scalar& borderValue = morphologyDefaultBorderValue() );
 
 //! @}
