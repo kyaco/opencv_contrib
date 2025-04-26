@@ -408,7 +408,7 @@ void morphologyEx(InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
         _dst = temp - _src;
         break;
     case MORPH_HITMISS:
-        CV_Error(cv::Error::StsBadArg, "StMorph doesn't support HIT-MISS operation.");
+        CV_Error(cv::Error::StsBadArg, "HIT-MISS operation is not supported.");
     default:
         CV_Error(cv::Error::StsBadArg, "Unknown morphological operation.");
     }
@@ -434,14 +434,7 @@ void morphologyEx(InputArray src, OutputArray dst, int op,
     InputArray kernel, Point anchor, int iterations,
     BorderTypes borderType, const Scalar& borderVal)
 {
-
-    Mat _kernel = kernel.getMat();
-    if (_kernel.empty())
-    {
-        _kernel = getStructuringElement(MORPH_RECT, Size(3, 3), Point(1, 1));
-    }
-
-    kernelDecompInfo kdi = decompKernel(_kernel, anchor, iterations);
+    kernelDecompInfo kdi = decompKernel(kernel, anchor, iterations);
     morphologyEx(src, dst, op, kdi, borderType, borderVal);
 }
 
