@@ -196,7 +196,10 @@ TEST(ximgproc_StMorph_ex, regression_close) { ex_rgr(im(CV_8UC3), MORPH_CLOSE, k
 TEST(ximgproc_StMorph_ex, regression_gradient) { ex_rgr(im(CV_8UC3), MORPH_GRADIENT, kn5()); }
 TEST(ximgproc_StMorph_ex, regression_tophat) { ex_rgr(im(CV_8UC3), MORPH_TOPHAT, kn5()); }
 TEST(ximgproc_StMorph_ex, regression_blackhat) { ex_rgr(im(CV_8UC3), MORPH_BLACKHAT, kn5()); }
-TEST(ximgproc_StMorph_ex, regression_hitmiss) { ex_rgr(im(CV_8UC1), MORPH_HITMISS, kn5()); }
+TEST(ximgproc_StMorph_ex, regression_hitmiss)
+{
+    EXPECT_THROW( { ex_rgr(im(CV_8UC1), MORPH_HITMISS, kn5()); }, cv::Exception);
+}
 
 #pragma endregion
 
