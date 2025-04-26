@@ -331,9 +331,9 @@ TEST(ximgproc_StMorph_eval, pdi)
     Mat dst;
     int sizes[]{ 3, 5, 7, 9, 11, 21, 31, 41, 51, 101, 151, 201, 251, 301, 351, 401, 451, 501 };
 
-    std::ofstream ss("opencvlog.txt", std::ios_base::out);
+    std::ofstream ss("opencvlog_pdi.txt", std::ios_base::out);
 
-    ss << "----RECT----" << endl;
+    for (int c = 0; c < 3; c++)
     for (int i = 1; i < 202; i += 2)
     {
         ss << i;
@@ -371,9 +371,13 @@ TEST(ximgproc_StMorph_eval, pdi)
             meter.start();
             cv::erode(img, dst, kn);
             meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
         }
-        ss << "\t" << meter.getTimeMilli();
-        meter.reset();
+        else
+        {
+            ss << "\t";
+        }
 
         // st-rect
         kn = getStructuringElement(MORPH_RECT, sz);
@@ -399,7 +403,7 @@ TEST(ximgproc_StMorph_eval, pdi)
         meter.start();
         stMorph::erode(img, dst, kdi);
         meter.stop();
-        ss << "\t" << meter.getTimeMilli() << endl;
+        ss << "\t" << meter.getTimeMilli() << "\n";
         meter.reset();
     }
     ss.close();
@@ -411,9 +415,9 @@ TEST(ximgproc_StMorph_eval, integrated)
     Mat dst;
     int sizes[]{ 3, 5, 7, 9, 11, 21, 31, 41, 51, 101, 151, 201, 251, 301, 351, 401, 451, 501 };
 
-    std::ofstream ss("opencvlog.txt", std::ios_base::out);
+    std::ofstream ss("opencvlog_integrated.txt", std::ios_base::out);
 
-    ss << "----RECT----" << endl;
+    for (int c = 0; c < 3; c++)
     for (int i = 1; i < 202; i += 2)
     {
         ss << i;
@@ -450,9 +454,13 @@ TEST(ximgproc_StMorph_eval, integrated)
             meter.start();
             cv::erode(img, dst, kn);
             meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
         }
-        ss << "\t" << meter.getTimeMilli();
-        meter.reset();
+        else
+        {
+            ss << "\t";
+        }
 
         // st-rect
         kn = getStructuringElement(MORPH_RECT, sz);
@@ -475,7 +483,7 @@ TEST(ximgproc_StMorph_eval, integrated)
         meter.start();
         stMorph::erode(img, dst, kn);
         meter.stop();
-        ss << "\t" << meter.getTimeMilli() << endl;
+        ss << "\t" << meter.getTimeMilli() << "\n";
         meter.reset();
     }
     ss.close();
