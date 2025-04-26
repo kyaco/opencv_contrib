@@ -220,6 +220,37 @@ Mat sparseTableFillPlanning(
     return path;
 }
 
+kernelDecompInfo decompKernel(InputArray kernel, Point anchor, int iterations)
+{
+    Mat _kernel = kernel.getMat();
+    // Fix kernel in case of it is empty.
+    if (_kernel.empty())
+    {
+        _kernel = getStructuringElement(MORPH_RECT, Size(1 + iterations * 2, 1 + iterations * 2));
+        anchor = Point(iterations, iterations);
+        iterations = 1;
+    }
+    if (countNonZero(_kernel) == 0)
+    {
+        _kernel.at<uchar>(0, 0) = 1;
+    }
+    // Fix anchor to the center of the kernel.
+    anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
+
+
+    int rowDepthLim = log2(longestRowRunLength(_kernel)) + 1;
+    int colDepthLim = log2(longestColRunLength(_kernel)) + 1;
+    std::vector<std::vector<std::vector<Point>>> pow2Rects
+        = genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
+
+    Mat stPlan
+        = sparseTableFillPlanning(pow2Rects, rowDepthLim, colDepthLim);
+
+    anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
+
+    return { _kernel.rows, _kernel.cols, pow2Rects, stPlan, anchor, iterations };
+}
+
 void morphDfs(int minmax, Mat& st, Mat& dst,
     std::vector<std::vector<std::vector<Point>>> row2Rects, const Mat& stPlan,
     int rowDepth, int colDepth)
@@ -318,37 +349,6 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
     }
 }
 
-kernelDecompInfo getKernelDecompInfo(InputArray kernel, Point anchor, int iterations)
-{
-    Mat _kernel = kernel.getMat();
-    // Fix kernel in case of it is empty.
-    if (_kernel.empty())
-    {
-        _kernel = getStructuringElement(MORPH_RECT, Size(1 + iterations * 2, 1 + iterations * 2));
-        anchor = Point(iterations, iterations);
-        iterations = 1;
-    }
-    if (countNonZero(_kernel) == 0)
-    {
-        _kernel.at<uchar>(0, 0) = 1;
-    }
-    // Fix anchor to the center of the kernel.
-    anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
-
-
-    int rowDepthLim = log2(longestRowRunLength(_kernel)) + 1;
-    int colDepthLim = log2(longestColRunLength(_kernel)) + 1;
-    std::vector<std::vector<std::vector<Point>>> pow2Rects
-        = genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
-
-    Mat stPlan
-        = sparseTableFillPlanning(pow2Rects, rowDepthLim, colDepthLim);
-
-    anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
-
-    return { _kernel.rows, _kernel.cols, pow2Rects, stPlan, anchor, iterations };
-}
-
 void erode(InputArray src, OutputArray dst, kernelDecompInfo kdi,
     BorderTypes borderType, const Scalar& borderVal)
 {
@@ -408,18 +408,17 @@ void morphologyEx(InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
         _dst = temp - _src;
         break;
     case MORPH_HITMISS:
-        CV_Error(cv::Error::StsBadArg, "stMorph doesn't support HITMISS operation");
+        CV_Error(cv::Error::StsBadArg, "StMorph doesn't support HIT-MISS operation.");
     default:
-        CV_Error(cv::Error::StsBadArg, "unknown morphological operation");
+        CV_Error(cv::Error::StsBadArg, "Unknown morphological operation.");
     }
 }
 
-//------------------------------------------
 void erode(InputArray src, OutputArray dst, InputArray kernel,
     Point anchor, int iterations,
     BorderTypes borderType, const Scalar& borderVal)
 {
-    kernelDecompInfo kdi = getKernelDecompInfo(kernel, anchor, iterations);
+    kernelDecompInfo kdi = decompKernel(kernel, anchor, iterations);
     morphOp(Op::Min, src, dst, kdi, borderType, borderVal);
 }
 
@@ -427,7 +426,7 @@ void dilate(InputArray src, OutputArray dst, InputArray kernel,
     Point anchor, int iterations,
     BorderTypes borderType, const Scalar& borderVal)
 {
-    kernelDecompInfo kdi = getKernelDecompInfo(kernel, anchor, iterations);
+    kernelDecompInfo kdi = decompKernel(kernel, anchor, iterations);
     morphOp(Op::Max, src, dst, kdi, borderType, borderVal);
 }
 
@@ -442,7 +441,7 @@ void morphologyEx(InputArray src, OutputArray dst, int op,
         _kernel = getStructuringElement(MORPH_RECT, Size(3, 3), Point(1, 1));
     }
 
-    kernelDecompInfo kdi = getKernelDecompInfo(_kernel, anchor, iterations);
+    kernelDecompInfo kdi = decompKernel(_kernel, anchor, iterations);
     morphologyEx(src, dst, op, kdi, borderType, borderVal);
 }
 

@@ -14,6 +14,31 @@ namespace stMorph {
 //! @addtogroup imgproc_filter
 //! @{
 
+typedef struct _kernelDecompInfo
+{
+    int rows;
+    int cols;
+    std::vector<std::vector<std::vector<Point>>> stRects;
+    Mat plan;
+    Point anchor;
+    int iterations;
+} kernelDecompInfo;
+
+CV_EXPORTS_W kernelDecompInfo decompKernel(InputArray kernel,
+                                  Point anchor = Point(-1, -1), int iterations = 1);
+
+CV_EXPORTS_W void erode( InputArray src, OutputArray dst, kernelDecompInfo kdi,
+                     BorderTypes borderType = BORDER_CONSTANT,
+                     const Scalar& borderValue = morphologyDefaultBorderValue() );
+
+CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, kernelDecompInfo kdi,
+                     BorderTypes borderType = BORDER_CONSTANT,
+                     const Scalar& borderValue = morphologyDefaultBorderValue() );
+
+CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
+                                BorderTypes borderType = BORDER_CONSTANT,
+                                const Scalar& borderValue = morphologyDefaultBorderValue() );
+
 /**
  * @brief Faster implementation of cv::erode with sparse table concept.
  *
@@ -81,42 +106,7 @@ CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
                                 Point anchor = Point(-1,-1), int iterations = 1,
                                 BorderTypes borderType = BORDER_CONSTANT,
                                 const Scalar& borderValue = morphologyDefaultBorderValue() );
-
-typedef struct _kernelDecompInfo
-{
-    int rows;
-    int cols;
-    std::vector<std::vector<std::vector<Point>>> stRects;
-    Mat plan;
-    Point anchor;
-    int iterations;
-} kernelDecompInfo;
-
-CV_EXPORTS_W kernelDecompInfo getKernelDecompInfo(InputArray kernel,
-                                  Point anchor = Point(-1, -1), int iterations = 1);
-CV_EXPORTS_W void erode( InputArray src, OutputArray dst,
-                     kernelDecompInfo kdi,
-                     BorderTypes borderType = BORDER_CONSTANT,
-                     const Scalar& borderValue = morphologyDefaultBorderValue() );
-CV_EXPORTS_W void dilate( InputArray src, OutputArray dst,
-                     kernelDecompInfo kdi,
-                     BorderTypes borderType = BORDER_CONSTANT,
-                     const Scalar& borderValue = morphologyDefaultBorderValue() );
-CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
-                                int op, kernelDecompInfo kdi,
-                                BorderTypes borderType = BORDER_CONSTANT,
-                                const Scalar& borderValue = morphologyDefaultBorderValue() );
-
 //! @}
-
-CV_EXPORTS_W std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
-    const Mat& kernel, int rowLim, int colLim);
-CV_EXPORTS_W Mat sparseTableFillPlanning(
-    std::vector<std::vector<std::vector<Point>>> stNodeMap, int rowLim, int colLim);
-
-CV_EXPORTS_W int log2(int n);
-CV_EXPORTS_W int longestRowRunLength(const Mat& kernel);
-CV_EXPORTS_W int longestColRunLength(const Mat& kernel);
 
 }} // cv::stMorph::
 #endif

@@ -200,22 +200,18 @@ TEST(ximgproc_StMorph_ex, regression_hitmiss) { ex_rgr(im(CV_8UC1), MORPH_HITMIS
 
 #pragma endregion
 
-#pragma region power2RectCovering
+#pragma region decomposition
 
-std::vector<std::vector<std::vector<Point>>> p2RCov(InputArray kernel)
+stMorph::kernelDecompInfo ftr_decomp(InputArray kernel)
 {
-    Mat _kernel = kernel.getMat();
-    int rowDepthLim = stMorph::log2(stMorph::longestRowRunLength(_kernel)) + 1;
-    int colDepthLim = stMorph::log2(stMorph::longestColRunLength(_kernel)) + 1;
-    std::vector<std::vector<std::vector<Point>>> p2Rects
-        = stMorph::genPow2RectsToCoverKernel(_kernel, rowDepthLim, colDepthLim);
+    auto kdi = stMorph::decompKernel(kernel);
     Mat expected = kernel.getMat();
     Mat actual = Mat::zeros(kernel.size(), kernel.type());
-    for (int r = 0; r < p2Rects.size(); r++)
+    for (int r = 0; r < kdi.stRects.size(); r++)
     {
-        for (int c = 0; c < p2Rects[r].size(); c++)
+        for (int c = 0; c < kdi.stRects[r].size(); c++)
         {
-            for (Point p : p2Rects[r][c])
+            for (Point p : kdi.stRects[r][c])
             {
                 Rect rect(p.x, p.y, 1 << c, 1 << r);
                 actual(rect).setTo(1);
@@ -223,9 +219,9 @@ std::vector<std::vector<std::vector<Point>>> p2RCov(InputArray kernel)
         }
     }
     assertArraysIdentical(expected, actual);
-    return p2Rects;
+    return kdi;
 }
-void VisualizeCovering(Mat& kernel, const std::vector<std::vector<std::vector<Point>>>& rects)
+Mat VisualizeCovering(Mat& kernel, const stMorph::kernelDecompInfo& kdi)
 {
     const int rate = 20;
     const int fluct = 5;
@@ -240,12 +236,12 @@ void VisualizeCovering(Mat& kernel, const std::vector<std::vector<std::vector<Po
         Scalar(231, 131, 56), Scalar(206, 238, 136), Scalar(188, 78, 173), Scalar(27, 178, 206)
     };
     int i = 0;
-    for (int r = 0; r < rects.size(); r++)
+    for (int r = 0; r < kdi.stRects.size(); r++)
     {
-        for (int c = 0; c < rects[r].size(); c++)
+        for (int c = 0; c < kdi.stRects[r].size(); c++)
         {
             Size s(1 << c, 1 << r);
-            for (Point p : rects[r][c])
+            for (Point p : kdi.stRects[r][c])
             {
                 Rect rect(p, s);
                 int l = (rect.x) * rate + i % fluct;
@@ -264,131 +260,67 @@ void VisualizeCovering(Mat& kernel, const std::vector<std::vector<std::vector<Po
             }
         }
     }
-#if 0
-    imshow("Map", kernel);
-    waitKey();
-    destroyAllWindows();
-#endif
+    return kernel;
 }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd1) { p2RCov(knRnd(1000, 1)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd10) { p2RCov(knRnd(1000, 10)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd30) { p2RCov(knRnd(1000, 30)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd50) { p2RCov(knRnd(1000, 50)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd80) { p2RCov(knRnd(1000, 80)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_rnd90) { p2RCov(knRnd(1000, 90)); }
-TEST(ximgproc_StMorph_private, feature_P2RCov_visualize) {
-    Mat kernel = knRnd(50, 70);
-    auto rects = p2RCov(kernel);
-    VisualizeCovering(kernel, rects);
-}
-
-#pragma endregion
-
-#pragma region planning
-
-void VisualizePlanning(
-    std::vector<std::vector<std::vector<Point>>> map, Mat res)
+Mat VisualizePlanning(stMorph::kernelDecompInfo kdi)
 {
     int g = 30;
-    int r = map.size();
-    int c = map[0].size();
-    Mat m = Mat::zeros(r * g, c * g, CV_8UC3);
-    for (int row = 0; row < r; row++)
+    int rows = kdi.plan.rows;
+    int cols = kdi.plan.cols;
+    Scalar vCol = Scalar(20, 20, 255);
+    Scalar eCol = Scalar(100, 100, 100);
+    Mat m = Mat::zeros(rows * g, cols * g, CV_8UC3);
+    for (int row = 0; row < rows; row++)
     {
-        for (int col = 0; col < c; col++)
+        for (int col = 0; col < cols; col++)
         {
             Rect nodeRect(col * g + g / 2 - 5, row * g + g / 2 - 5, 11, 11);
-            if (map[row][col].size() > 0)
-                cv::rectangle(m, nodeRect, Scalar(20, 20, 255), -1);
+            if (kdi.stRects[row][col].size() > 0)
+                cv::rectangle(m, nodeRect, vCol, -1);
         }
     }
-    for (int r = 0; r < res.rows; r++)
+    for (int r = 0; r < rows; r++)
     {
-        for (int c = 0; c < res.cols; c++)
+        for (int c = 0; c < cols; c++)
         {
-            Vec2b p = res.at<Vec2b>(r, c);
+            Vec2b p = kdi.plan.at<Vec2b>(r, c);
             Point sp(c * g + g / 2, r * g + g / 2);
             if (p[0] == 1)
             {
                 Point ep = Point(c * g + g / 2, (r + 1) * g + g / 2);
-                cv::line(m, sp, ep, Scalar(100, 100, 100), 2);
+                cv::line(m, sp, ep, eCol, 2);
             }
             if (p[1] == 1)
             {
-                Point ep = Point((c + 1) *g + g / 2, r * g + g / 2);
-                cv::line(m, sp, ep, Scalar(100, 100, 100), 2);
+                Point ep = Point((c + 1) * g + g / 2, r * g + g / 2);
+                cv::line(m, sp, ep, eCol, 2);
             }
         }
     }
+    return m;
+}
+TEST(ximgproc_StMorph_decomp, feature_rnd1) { ftr_decomp(knRnd(1000, 1)); }
+TEST(ximgproc_StMorph_decomp, feature_rnd10) { ftr_decomp(knRnd(1000, 10)); }
+TEST(ximgproc_StMorph_decomp, feature_rnd30) { ftr_decomp(knRnd(1000, 30)); }
+TEST(ximgproc_StMorph_decomp, feature_rnd50) { ftr_decomp(knRnd(1000, 50)); }
+TEST(ximgproc_StMorph_decomp, feature_rnd80) { ftr_decomp(knRnd(1000, 80)); }
+TEST(ximgproc_StMorph_decomp, feature_rnd90) { ftr_decomp(knRnd(1000, 90)); }
+TEST(ximgproc_StMorph_decomp, feature_visualize) {
+    Mat kernel = getStructuringElement(MORPH_ELLIPSE, Size(21, 21));
+    auto kdi = ftr_decomp(kernel);
+    Mat covering = VisualizeCovering(kernel, kdi);
+    Mat plan = VisualizePlanning(kdi);
 #if 0
-    imshow("Map", m);
+    imshow("Covering", covering);
+    imshow("Plan", plan);
     waitKey();
     destroyAllWindows();
 #endif
 }
-void feture_planning(const Mat& mat)
-{
-    std::vector<std::vector<std::vector<Point>>> map;
-    for (int r = 0; r < mat.rows; r++)
-    {
-        map.push_back(std::vector<std::vector<Point>>());
-        for (int c = 0; c < mat.cols; c++)
-        {
-            map[r].push_back(std::vector<Point>());
-            if (mat.at<uchar>(r, c) == 1)
-            {
-                map[r][c].push_back(Point(0, 0));
-            }
-        }
-    }
-
-    auto r = stMorph::sparseTableFillPlanning(map, mat.rows, mat.cols);
-    VisualizePlanning(map, r);
-}
-TEST(ximgproc_StMorph_private, planning1) { feture_planning(knAsymm()); }
-TEST(ximgproc_StMorph_private, planning2){ feture_planning(knRnd(14, 20)); }
 
 #pragma endregion
 
 #pragma region morph_comp
-
-void stDilate(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
-    int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
-{
-    Mat tmp;
-    stMorph::dilate(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
-}
-void stErode(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
-    int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
-{
-    Mat tmp;
-    stMorph::erode(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
-}
-void cvDilate(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
-    int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
-{
-    Mat tmp;
-    dilate(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
-}
-void cvErode(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
-    int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
-{
-    Mat tmp;
-    erode(src, tmp, kernel, anchor, iterations, bdrType, bdrVal);
-}
-TEST(ximgproc_StMorph_comp, 51_stDilate) { stDilate(im(CV_8UC3), kn51()); }
-TEST(ximgproc_StMorph_comp, 51_stEerode) { stErode(im(CV_8UC3), kn51()); }
-TEST(ximgproc_StMorph_comp, 51_cvDilate) { cvDilate(im(CV_8UC3), kn51()); }
-TEST(ximgproc_StMorph_comp, 51_cvErode) { cvErode(im(CV_8UC3), kn51()); }
-TEST(ximgproc_StMorph_comp, 5_stDilate) { stDilate(im(CV_8UC3), knOnes()); }
-TEST(ximgproc_StMorph_comp, 5_stEerode) { stErode(im(CV_8UC3), knOnes()); }
-TEST(ximgproc_StMorph_comp, 5_cvDilate) { cvDilate(im(CV_8UC3), knOnes()); }
-TEST(ximgproc_StMorph_comp, 5_cvErode) { cvErode(im(CV_8UC3), knOnes()); }
-TEST(ximgproc_StMorph_comp, 5_cvEErode) { cvErode(im(CV_8UC3), kn5()); }
 
 TEST(ximgproc_StMorph_eval, pdi)
 {
@@ -399,7 +331,7 @@ TEST(ximgproc_StMorph_eval, pdi)
     std::ofstream ss("opencvlog.txt", std::ios_base::out);
 
     ss << "----RECT----" << endl;
-    for (int i : sizes)
+    for (int i = 1; i < 202; i += 2)
     {
         ss << i;
         Size sz(i, i);
@@ -442,7 +374,7 @@ TEST(ximgproc_StMorph_eval, pdi)
 
         // st-rect
         kn = getStructuringElement(MORPH_RECT, sz);
-        kdi = stMorph::getKernelDecompInfo(kn);
+        kdi = stMorph::decompKernel(kn);
         meter.start();
         stMorph::erode(img, dst, kdi);
         meter.stop();
@@ -451,7 +383,7 @@ TEST(ximgproc_StMorph_eval, pdi)
 
         // st-cross
         kn = getStructuringElement(MORPH_CROSS, sz);
-        kdi = stMorph::getKernelDecompInfo(kn);
+        kdi = stMorph::decompKernel(kn);
         meter.start();
         stMorph::erode(img, dst, kdi);
         meter.stop();
@@ -460,7 +392,7 @@ TEST(ximgproc_StMorph_eval, pdi)
 
         // st-ellipse
         kn = getStructuringElement(MORPH_ELLIPSE, sz);
-        kdi = stMorph::getKernelDecompInfo(kn);
+        kdi = stMorph::decompKernel(kn);
         meter.start();
         stMorph::erode(img, dst, kdi);
         meter.stop();
@@ -479,7 +411,7 @@ TEST(ximgproc_StMorph_eval, integrated)
     std::ofstream ss("opencvlog.txt", std::ios_base::out);
 
     ss << "----RECT----" << endl;
-    for (int i : sizes)
+    for (int i = 1; i < 202; i += 2)
     {
         ss << i;
         Size sz(i, i);
