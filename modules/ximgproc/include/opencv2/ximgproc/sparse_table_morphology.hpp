@@ -14,27 +14,81 @@ namespace stMorph {
 //! @addtogroup imgproc_filter
 //! @{
 
+/**
+* @struct  kernelDecompInfo
+* @brief   struct to hold the results of decomposing the structuring element.
+*/
 typedef struct _kernelDecompInfo
 {
+    //! rows of the original kernel.
     int rows;
+    //! cols of the original kernel.
     int cols;
+    //!
+    //! set of rectangles to covers the kernel which height and width both are power of 2.
+    //! point stRects[rd][cd](c,r) means a rectangle left-top (c,r), width 2^rd and height 2^cd.
+    //!
     std::vector<std::vector<std::vector<Point>>> stRects;
+    //!
+    //! Vec2b Mat which sotres the order to calculate sparse table.
+    //! The type of returned mat is Vec2b.
+    //! * if path[dr][dc][0] == 1 then st[dr+1][dc] will be calculated from st[dr][dc].
+    //! * if path[dr][dc][1] == 1 then st[dr][dc+1] will be calculated from st[dr][dc].
+    //!
     Mat plan;
+    //! anchor position of the kernel.
     Point anchor;
+    //! Number of times erosion and dilation are applied.
     int iterations;
 } kernelDecompInfo;
 
+/**
+ * @brief Decompose the structuring element.
+ *
+ * @param  kernel       structuring element used for subsequent morphological operations.
+ * @param  anchor       position of the anchor within the element.
+ *                      default value (-1, -1) means that the anchor is at the element center.
+ * @param  iterations   number of times  is applied.
+ */
 CV_EXPORTS_W kernelDecompInfo decompKernel(InputArray kernel,
                                   Point anchor = Point(-1, -1), int iterations = 1);
 
+/**
+ * @brief  Erodes an image with a kernelDecompInfo using spase table method.
+ *
+ * @param  src          input image
+ * @param  dst          output image of the same size and type as src.
+ * @param  kdi          pre-computated kernelDecompInfo structure.
+ * @param  borderType   pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
+ * @param  borderValue  border value in case of a constant border
+ */
 CV_EXPORTS_W void erode( InputArray src, OutputArray dst, kernelDecompInfo kdi,
                      BorderTypes borderType = BORDER_CONSTANT,
                      const Scalar& borderValue = morphologyDefaultBorderValue() );
 
+/**
+ * @brief  Dilates an image with a kernelDecompInfo using spase table method.
+ *
+ * @param  src          input image;
+ * @param  dst          output image of the same size and type as src.
+ * @param  kdi          pre-computated kernelDecompInfo structure.
+ * @param  borderType   pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
+ * @param  borderValue  border value in case of a constant border
+ */
 CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, kernelDecompInfo kdi,
                      BorderTypes borderType = BORDER_CONSTANT,
                      const Scalar& borderValue = morphologyDefaultBorderValue() );
 
+/**
+ * @brief  Performs advanced morphological transformations with a kernelDecompInfo.
+ *
+ * @param  src          input image;
+ * @param  dst          output image of the same size and type as src.
+ * @param  op           all operations supported by cv::morphologyEx (except cv::MORPH_HITMISS)
+ * @param  kdi          pre-computated kernelDecompInfo structure.
+ * @param  borderType   pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
+ * @param  borderValue  border value in case of a constant border
+ */
 CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
                                 BorderTypes borderType = BORDER_CONSTANT,
                                 const Scalar& borderValue = morphologyDefaultBorderValue() );

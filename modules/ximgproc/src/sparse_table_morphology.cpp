@@ -10,6 +10,8 @@
 namespace cv {
 namespace stMorph {
 
+#pragma region decompKernel
+
 // normalizeAnchor; Copied from filterengine.hpp.
 static inline Point normalizeAnchor(Point anchor, Size ksize)
 {
@@ -20,11 +22,6 @@ static inline Point normalizeAnchor(Point anchor, Size ksize)
     CV_Assert(anchor.inside(Rect(0, 0, ksize.width, ksize.height)));
     return anchor;
 }
-
-enum Op
-{
-    Min, Max
-};
 
 int log2(int n)
 {
@@ -97,7 +94,7 @@ std::vector<Point> findP2RectCorners(const Mat& stNode, int rowDepth, int colDep
             if (row > 0 && stNode.at<uchar>(row - 1, col) == 1
                 && row + 1 < stNode.rows && stNode.at<uchar>(row + 1, col) == 1) continue;
 
-            // ignore if neighboring block is white
+            // ignore if deeper cell is white
             if (col + colOfst < stNode.cols && stNode.at<uchar>(row, col + colOfst) == 1) continue;
             if (col - colOfst >= 0 && stNode.at<uchar>(row, col - colOfst) == 1) continue;
             if (row + rowOfst < stNode.rows && stNode.at<uchar>(row + rowOfst, col) == 1) continue;
@@ -143,15 +140,11 @@ std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
     return p2Rects;
 }
 
+/*
+* Solves the rectilinear steiner arborescence problem greedy.
+*/
 Mat SolveRSAPGreedy(const Mat& initialMap)
 {
-    /*
-    * Solves the rectilinear steiner arborescence problem greedy.
-    * https://link.springer.com/article/10.1007/BF01758762
-    *
-    * Following implementation is O(n^3)-time algorithm
-    * which is different from the mothod proposed in the paper.
-    */
     CV_Assert(initialMap.type() == CV_8UC1);
     std::vector<Point> pos;
     for (int r = 0; r < initialMap.rows; r++)
@@ -193,7 +186,7 @@ Mat SolveRSAPGreedy(const Mat& initialMap)
             resMap.at<Vec2b>(row, maxX)[0] = 1;
 
         pos[maxI] = Point(maxX, maxY);
-        swap(pos[maxJ], pos[pos.size() - 1]);
+        std::swap(pos[maxJ], pos[pos.size() - 1]);
         pos.pop_back();
     }
     return resMap;
@@ -202,13 +195,6 @@ Mat SolveRSAPGreedy(const Mat& initialMap)
 Mat sparseTableFillPlanning(
     std::vector<std::vector<std::vector<Point>>> pow2Rects, int rowDepthLim, int colDepthLim)
 {
-    /*
-    * Plan the order to fill the required 2d-sparse-table nodes.
-    * The type of returned mat is Vec2b.
-    * if path[dr][dc][0] == 1 then st[dr+1][dc] will be calculated from st[dr][dc].
-    * if path[dr][dc][1] == 1 then st[dr][dc+1] will be calculated from st[dr][dc].
-    */
-
     // list up required sparse table nodes.
     Mat stMap = Mat::zeros(rowDepthLim, colDepthLim, CV_8UC1);
     for (int rd = 0; rd < rowDepthLim; rd++)
@@ -234,9 +220,6 @@ kernelDecompInfo decompKernel(InputArray kernel, Point anchor, int iterations)
     {
         _kernel.at<uchar>(0, 0) = 1;
     }
-    // Fix anchor to the center of the kernel.
-    anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
-
 
     int rowDepthLim = log2(longestRowRunLength(_kernel)) + 1;
     int colDepthLim = log2(longestColRunLength(_kernel)) + 1;
@@ -246,10 +229,20 @@ kernelDecompInfo decompKernel(InputArray kernel, Point anchor, int iterations)
     Mat stPlan
         = sparseTableFillPlanning(pow2Rects, rowDepthLim, colDepthLim);
 
+    // Fix anchor to the center of the kernel.
     anchor = stMorph::normalizeAnchor(anchor, _kernel.size());
 
     return { _kernel.rows, _kernel.cols, pow2Rects, stPlan, anchor, iterations };
 }
+
+#pragma endregion
+
+#pragma region st-morphology
+
+enum Op
+{
+    Min, Max
+};
 
 void morphDfs(int minmax, Mat& st, Mat& dst,
     std::vector<std::vector<std::vector<Point>>> row2Rects, const Mat& stPlan,
@@ -414,6 +407,10 @@ void morphologyEx(InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
     }
 }
 
+#pragma endregion
+
+#pragma region cv-morphology
+
 void erode(InputArray src, OutputArray dst, InputArray kernel,
     Point anchor, int iterations,
     BorderTypes borderType, const Scalar& borderVal)
@@ -437,5 +434,7 @@ void morphologyEx(InputArray src, OutputArray dst, int op,
     kernelDecompInfo kdi = decompKernel(kernel, anchor, iterations);
     morphologyEx(src, dst, op, kdi, borderType, borderVal);
 }
+
+#pragma endregion
 
 }} // cv::stMorph::
