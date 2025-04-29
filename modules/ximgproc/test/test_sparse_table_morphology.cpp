@@ -227,18 +227,20 @@ stMorph::kernelDecompInfo ftr_decomp(InputArray kernel)
 Mat VisualizeCovering(Mat& kernel, const stMorph::kernelDecompInfo& kdi)
 {
     const int rate = 20;
-    const int fluct = 5;
+    const int fluct = 3;
     const int colors = 20;
     resize(kernel * 255, kernel, Size(), rate, rate, InterpolationFlags::INTER_NEAREST);
     cvtColor(kernel, kernel, cv::COLOR_GRAY2BGR);
     Scalar color[colors]{
-        Scalar(83, 89, 73), Scalar(49, 238, 73), Scalar(220, 192, 189), Scalar(174, 207, 34),
-        Scalar(144, 169, 187), Scalar(137, 94, 76), Scalar(42, 11, 215), Scalar(113, 11, 204),
-        Scalar(71, 124, 8), Scalar(192, 38, 8), Scalar(82, 201, 8), Scalar(70, 7, 112),
-        Scalar(166, 219, 201), Scalar(154, 173, 0), Scalar(132, 127, 139), Scalar(154, 1, 68),
-        Scalar(231, 131, 56), Scalar(206, 238, 136), Scalar(188, 78, 173), Scalar(27, 178, 206)
+        Scalar(255, 127, 127), Scalar(255, 127, 191), Scalar(255, 127, 255), Scalar(191, 127, 255),
+        Scalar(127, 127, 255), Scalar(127, 191, 255), Scalar(127, 255, 255), Scalar(127, 255, 191),
+        Scalar(127, 255, 127), Scalar(191, 255, 127), Scalar(255, 255, 127), Scalar(255, 191, 127)
     };
     int i = 0;
+    for (int r = 0; r < kdi.rows; r++)
+        cv::line(kernel, Point(0, r * rate), Point(kdi.cols * rate, r * rate), Scalar(0));
+    for (int c = 0; c < kdi.cols; c++)
+        cv::line(kernel, Point(c * rate, 0), Point(c * rate, kdi.rows * rate), Scalar(0));
     for (int r = 0; r < kdi.stRects.size(); r++)
     {
         for (int c = 0; c < kdi.stRects[r].size(); c++)
@@ -247,10 +249,10 @@ Mat VisualizeCovering(Mat& kernel, const stMorph::kernelDecompInfo& kdi)
             for (Point p : kdi.stRects[r][c])
             {
                 Rect rect(p, s);
-                int l = (rect.x) * rate + i % fluct;
-                int t = (rect.y) * rate + i % fluct;
-                int r = (rect.x + rect.width) * rate - fluct + i % fluct;
-                int b = (rect.y + rect.height) * rate - fluct + i % fluct;
+                int l = (rect.x) * rate + i % fluct + 2;
+                int t = (rect.y) * rate + i % fluct + 2;
+                int r = (rect.x + rect.width) * rate - fluct + i % fluct - 1;
+                int b = (rect.y + rect.height) * rate - fluct + i % fluct - 1;
                 Point lt(l, t);
                 Point lb(l, b);
                 Point rb(r, b);
@@ -280,6 +282,8 @@ Mat VisualizePlanning(stMorph::kernelDecompInfo kdi)
             Rect nodeRect(col * g + g / 2 - 5, row * g + g / 2 - 5, 11, 11);
             if (kdi.stRects[row][col].size() > 0)
                 cv::rectangle(m, nodeRect, vCol, -1);
+            else
+                cv::rectangle(m, nodeRect, vCol, 1);
         }
     }
     for (int r = 0; r < rows; r++)
@@ -309,7 +313,7 @@ TEST(ximgproc_StMorph_decomp, feature_rnd50) { ftr_decomp(knRnd(1000, 50)); }
 TEST(ximgproc_StMorph_decomp, feature_rnd80) { ftr_decomp(knRnd(1000, 80)); }
 TEST(ximgproc_StMorph_decomp, feature_rnd90) { ftr_decomp(knRnd(1000, 90)); }
 TEST(ximgproc_StMorph_decomp, feature_visualize) {
-    Mat kernel = getStructuringElement(MORPH_ELLIPSE, Size(21, 21));
+    Mat kernel = getStructuringElement(MORPH_ELLIPSE, Size(5, 5));
     auto kdi = ftr_decomp(kernel);
     Mat covering = VisualizeCovering(kernel, kdi);
     Mat plan = VisualizePlanning(kdi);
@@ -366,7 +370,7 @@ TEST(ximgproc_StMorph_eval, pdi)
 
         // cv-ellipse
         kn = getStructuringElement(MORPH_ELLIPSE, sz);
-        if (i <= 41)
+        if (i <= 23)
         {
             meter.start();
             cv::erode(img, dst, kn);
@@ -449,7 +453,7 @@ TEST(ximgproc_StMorph_eval, integrated)
 
         // cv-ellipse
         kn = getStructuringElement(MORPH_ELLIPSE, sz);
-        if (i <= 41)
+        if (i <= 23)
         {
             meter.start();
             cv::erode(img, dst, kn);
