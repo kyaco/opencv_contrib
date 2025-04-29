@@ -327,4 +327,189 @@ TEST(ximgproc_StMorph_decomp, feature_visualize) {
 
 #pragma endregion
 
+#pragma region morph_comp
+
+TEST(ximgproc_StMorph_eval, pdi)
+{
+    Mat img = im(CV_8UC3);
+    Mat dst;
+    int sizes[]{ 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 35, 41, 45, 51, 55, 61, 71,
+                81, 91, 101, 121, 151, 171, 201, 221, 251, 301, 351, 401, 451, 501 };
+
+    std::ofstream ss("opencvlog_pdi.txt", std::ios_base::out);
+
+    for (int c = 0; c < 3; c++)
+    for (int i: sizes)
+    {
+        ss << i;
+        Size sz(i, i);
+        cv::TickMeter meter;
+        Mat kn;
+        stMorph::kernelDecompInfo kdi;
+
+        // cv-rect
+        kn = getStructuringElement(MORPH_RECT, sz);
+        if (i <= 401)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
+        }
+        else
+        {
+            ss << "\t";
+        }
+
+        // cv-cross
+        kn = getStructuringElement(MORPH_CROSS, sz);
+        if (i <= 401)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
+        }
+        else
+        {
+            ss << "\t";
+        }
+
+        // cv-ellipse
+        kn = getStructuringElement(MORPH_ELLIPSE, sz);
+        if (i <= 23)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
+        }
+        else
+        {
+            ss << "\t";
+        }
+
+        // st-rect
+        kn = getStructuringElement(MORPH_RECT, sz);
+        kdi = stMorph::decompKernel(kn);
+        meter.start();
+        stMorph::erode(img, dst, kdi);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // st-cross
+        kn = getStructuringElement(MORPH_CROSS, sz);
+        kdi = stMorph::decompKernel(kn);
+        meter.start();
+        stMorph::erode(img, dst, kdi);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // st-ellipse
+        kn = getStructuringElement(MORPH_ELLIPSE, sz);
+        kdi = stMorph::decompKernel(kn);
+        meter.start();
+        stMorph::erode(img, dst, kdi);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli() << "\n";
+        meter.reset();
+    }
+    ss.close();
+}
+
+TEST(ximgproc_StMorph_eval, integrated)
+{
+    Mat img = im(CV_8UC3);
+    Mat dst;
+    int sizes[]{ 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 35, 41, 45, 51, 55, 61, 71,
+                81, 91, 101, 121, 151, 171, 201, 221, 251, 301, 351, 401, 451, 501 };
+
+    std::ofstream ss("opencvlog_integrated.txt", std::ios_base::out);
+
+    for (int c = 0; c < 3; c++)
+    for (int i: sizes)
+    {
+        ss << i;
+        Size sz(i, i);
+        cv::TickMeter meter;
+        Mat kn;
+
+        // cv-rect
+        kn = getStructuringElement(MORPH_RECT, sz);
+        if (i <= 401)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
+        }
+        else
+        {
+            ss << "\t";
+        }
+
+        // cv-cross
+        kn = getStructuringElement(MORPH_CROSS, sz);
+        if (i <= 401)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
+        }
+        else
+        {
+            ss << "\t";
+        }
+
+        // cv-ellipse
+        kn = getStructuringElement(MORPH_ELLIPSE, sz);
+        if (i <= 23)
+        {
+            meter.start();
+            cv::erode(img, dst, kn);
+            meter.stop();
+            ss << "\t" << meter.getTimeMilli();
+            meter.reset();
+        }
+        else
+        {
+            ss << "\t";
+        }
+
+        // st-rect
+        kn = getStructuringElement(MORPH_RECT, sz);
+        meter.start();
+        stMorph::erode(img, dst, kn);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // st-cross
+        kn = getStructuringElement(MORPH_CROSS, sz);
+        meter.start();
+        stMorph::erode(img, dst, kn);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli();
+        meter.reset();
+
+        // st-ellipse
+        kn = getStructuringElement(MORPH_ELLIPSE, sz);
+        meter.start();
+        stMorph::erode(img, dst, kn);
+        meter.stop();
+        ss << "\t" << meter.getTimeMilli() << "\n";
+        meter.reset();
+    }
+    ss.close();
+}
+#pragma endregion
+
 }} // opencv_test:: ::
