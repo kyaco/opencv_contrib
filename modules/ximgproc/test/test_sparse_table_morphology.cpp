@@ -34,7 +34,6 @@ Mat im(int type)
 }
 Mat kn4() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(4, 4)); }
 Mat kn5() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(5, 5)); }
-Mat kn51() { return getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, Size(51, 51)); }
 Mat knBig() { return getStructuringElement(cv::MorphShapes::MORPH_RECT, Size(201, 201)); }
 Mat kn1Zero() { return Mat::zeros(1, 1, CV_8UC1); }
 Mat kn1One() { return Mat::ones(1, 1, CV_8UC1); }
