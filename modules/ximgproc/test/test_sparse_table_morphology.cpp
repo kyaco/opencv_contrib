@@ -222,12 +222,12 @@ Mat VisualizeCovering(Mat& kernel, const stMorph::kernelDecompInfo& kdi)
         cv::line(kernel, Point(0, r * rate), Point(kdi.cols * rate, r * rate), Scalar(0));
     for (int c = 0; c < kdi.cols; c++)
         cv::line(kernel, Point(c * rate, 0), Point(c * rate, kdi.rows * rate), Scalar(0));
-    for (uint r = 0; r < kdi.stRects.size(); r++)
+    for (uint row = 0; row < kdi.stRects.size(); row++)
     {
-        for (uint c = 0; c < kdi.stRects[r].size(); c++)
+        for (uint col = 0; col < kdi.stRects[row].size(); col++)
         {
-            Size s(1 << c, 1 << r);
-            for (Point p : kdi.stRects[r][c])
+            Size s(1 << col, 1 << row);
+            for (Point p : kdi.stRects[row][col])
             {
                 Rect rect(p, s);
                 int l = (rect.x) * rate + i % fluct + 2;
