@@ -51,7 +51,7 @@ typedef struct _kernelDecompInfo
  *                      default value (-1, -1) means that the anchor is at the element center.
  * @param  iterations   number of times  is applied.
  */
-CV_EXPORTS_W kernelDecompInfo decompKernel(InputArray kernel,
+CV_EXPORTS kernelDecompInfo decompKernel(InputArray kernel,
                                   Point anchor = Point(-1, -1), int iterations = 1);
 
 /**
@@ -63,7 +63,7 @@ CV_EXPORTS_W kernelDecompInfo decompKernel(InputArray kernel,
  * @param  borderType   pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
  * @param  borderValue  border value in case of a constant border
  */
-CV_EXPORTS_W void erode( InputArray src, OutputArray dst, kernelDecompInfo kdi,
+CV_EXPORTS void erode( InputArray src, OutputArray dst, kernelDecompInfo kdi,
                      BorderTypes borderType = BORDER_CONSTANT,
                      const Scalar& borderValue = morphologyDefaultBorderValue() );
 
@@ -76,7 +76,7 @@ CV_EXPORTS_W void erode( InputArray src, OutputArray dst, kernelDecompInfo kdi,
  * @param  borderType   pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
  * @param  borderValue  border value in case of a constant border
  */
-CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, kernelDecompInfo kdi,
+CV_EXPORTS void dilate( InputArray src, OutputArray dst, kernelDecompInfo kdi,
                      BorderTypes borderType = BORDER_CONSTANT,
                      const Scalar& borderValue = morphologyDefaultBorderValue() );
 
@@ -90,7 +90,7 @@ CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, kernelDecompInfo kdi,
  * @param  borderType   pixel extrapolation method, see #BorderTypes. #BORDER_WRAP is not supported.
  * @param  borderValue  border value in case of a constant border
  */
-CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
+CV_EXPORTS void morphologyEx( InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
                                 BorderTypes borderType = BORDER_CONSTANT,
                                 const Scalar& borderValue = morphologyDefaultBorderValue() );
 
@@ -110,7 +110,7 @@ CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst, int op, kernelD
  *
  * @see cv::erode
  */
-CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
+CV_EXPORTS void erode( InputArray src, OutputArray dst, InputArray kernel,
                           Point anchor = Point(-1,-1), int iterations = 1,
                           BorderTypes borderType = BORDER_CONSTANT,
                           const Scalar& borderValue = morphologyDefaultBorderValue() );
@@ -131,7 +131,7 @@ CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
  *
  * @see cv::dilate
  */
-CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
+CV_EXPORTS void dilate( InputArray src, OutputArray dst, InputArray kernel,
                           Point anchor = Point(-1,-1), int iterations = 1,
                           BorderTypes borderType = BORDER_CONSTANT,
                           const Scalar& borderValue = morphologyDefaultBorderValue() );
@@ -156,7 +156,7 @@ CV_EXPORTS_W void dilate( InputArray src, OutputArray dst, InputArray kernel,
  *
  * @see cv::morphologyEx
  */
-CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
+CV_EXPORTS void morphologyEx( InputArray src, OutputArray dst,
                                 int op, InputArray kernel,
                                 Point anchor = Point(-1,-1), int iterations = 1,
                                 BorderTypes borderType = BORDER_CONSTANT,
