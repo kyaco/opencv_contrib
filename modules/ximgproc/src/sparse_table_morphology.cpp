@@ -158,9 +158,9 @@ Mat SolveRSAPGreedy(const Mat& initialMap)
         int maxJ = 0;
         int maxX = 0;
         int maxY = 0;
-        for (int i = 0; i < pos.size(); i++)
+        for (uint i = 0; i < pos.size(); i++)
         {
-            for (int j = i + 1; j < pos.size(); j++)
+            for (uint j = i + 1; j < pos.size(); j++)
             {
                 int _x = std::min(pos[i].x, pos[j].x);
                 int _y = std::min(pos[i].y, pos[j].y);
