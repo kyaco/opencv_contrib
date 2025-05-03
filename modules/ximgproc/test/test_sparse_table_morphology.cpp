@@ -9,8 +9,6 @@
 namespace opencv_test {
 namespace {
 
-#pragma region Common test methods
-
 void assertArraysIdentical(InputArray ary1, InputArray ary2)
 {
     Mat xor = ary1.getMat() ^ ary2.getMat();
@@ -54,10 +52,6 @@ Mat knRnd(int size, int density)
     rndMat.setTo(1, 1 < rndMat);
     return rndMat;
 }
-
-#pragma endregion
-
-#pragma region dilasion
 
 /*
 * dilate regression tests.
@@ -114,10 +108,6 @@ TEST(ximgproc_StMorph_dilate, feature_8SC3) { dilate_ftr(im(CV_8SC3), kn5()); }
 TEST(ximgproc_StMorph_dilate, feature_32SC1) { dilate_ftr(im(CV_32SC1), kn5()); }
 TEST(ximgproc_StMorph_dilate, feature_32SC3) { dilate_ftr(im(CV_32SC3), kn5()); }
 
-#pragma endregion
-
-#pragma region erosion
-
 /*
 * erode regression tests.
 */
@@ -173,10 +163,6 @@ TEST(ximgproc_StMorph_erode, feature_8SC3) { erode_ftr(im(CV_8SC3), kn5()); }
 TEST(ximgproc_StMorph_erode, feature_32SC1) { erode_ftr(im(CV_32SC1), kn5()); }
 TEST(ximgproc_StMorph_erode, feature_32SC3) { erode_ftr(im(CV_32SC3), kn5()); }
 
-#pragma endregion
-
-#pragma region morphologyEx
-
 /*
 * morphologyEx regression tests.
 */
@@ -200,10 +186,6 @@ TEST(ximgproc_StMorph_ex, regression_hitmiss)
 {
     EXPECT_THROW( { ex_rgr(im(CV_8UC1), MORPH_HITMISS, kn5()); }, cv::Exception);
 }
-
-#pragma endregion
-
-#pragma region decomposition
 
 stMorph::kernelDecompInfo ftr_decomp(InputArray kernel)
 {
@@ -324,10 +306,6 @@ TEST(ximgproc_StMorph_decomp, feature_visualize) {
     destroyAllWindows();
 #endif
 }
-
-#pragma endregion
-
-#pragma region morph_comp
 
 TEST(ximgproc_StMorph_eval, pdi)
 {
@@ -510,6 +488,5 @@ TEST(ximgproc_StMorph_eval, integrated)
     }
     ss.close();
 }
-#pragma endregion
 
 }} // opencv_test:: ::

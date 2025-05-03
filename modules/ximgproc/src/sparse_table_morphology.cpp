@@ -8,9 +8,8 @@
 #include <vector>
 
 namespace cv {
+namespace ximgproc {
 namespace stMorph {
-
-#pragma region decompKernel
 
 // normalizeAnchor; Copied from filterengine.hpp.
 static inline Point normalizeAnchor(Point anchor, Size ksize)
@@ -235,10 +234,6 @@ kernelDecompInfo decompKernel(InputArray kernel, Point anchor, int iterations)
     return { _kernel.rows, _kernel.cols, pow2Rects, stPlan, anchor, iterations };
 }
 
-#pragma endregion
-
-#pragma region st-morphology
-
 enum Op
 {
     Min, Max
@@ -407,10 +402,6 @@ void morphologyEx(InputArray src, OutputArray dst, int op, kernelDecompInfo kdi,
     }
 }
 
-#pragma endregion
-
-#pragma region cv-morphology
-
 void erode(InputArray src, OutputArray dst, InputArray kernel,
     Point anchor, int iterations,
     BorderTypes borderType, const Scalar& borderVal)
@@ -435,6 +426,4 @@ void morphologyEx(InputArray src, OutputArray dst, int op,
     morphologyEx(src, dst, op, kdi, borderType, borderVal);
 }
 
-#pragma endregion
-
-}} // cv::stMorph::
+}}} // cv::ximgproc::stMorph::

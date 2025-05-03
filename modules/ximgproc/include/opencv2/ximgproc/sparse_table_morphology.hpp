@@ -9,6 +9,7 @@
 #include <vector>
 
 namespace cv {
+namespace ximgproc {
 namespace stMorph {
 
 //! @addtogroup imgproc_filter
@@ -162,5 +163,5 @@ CV_EXPORTS_W void morphologyEx( InputArray src, OutputArray dst,
                                 const Scalar& borderValue = morphologyDefaultBorderValue() );
 //! @}
 
-}} // cv::stMorph::
+}}} // cv::ximgproc::stMorph::
 #endif
