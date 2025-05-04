@@ -19,7 +19,7 @@ namespace stMorph {
 * @struct  kernelDecompInfo
 * @brief   struct to hold the results of decomposing the structuring element.
 */
-typedef struct _kernelDecompInfo
+struct CV_EXPORTS kernelDecompInfo
 {
     //! rows of the original kernel.
     int rows;
@@ -41,7 +41,7 @@ typedef struct _kernelDecompInfo
     Point anchor;
     //! Number of times erosion and dilation are applied.
     int iterations;
-} kernelDecompInfo;
+}
 
 /**
  * @brief Decompose the structuring element.
