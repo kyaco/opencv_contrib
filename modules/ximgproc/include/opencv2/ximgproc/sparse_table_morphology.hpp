@@ -41,7 +41,7 @@ struct CV_EXPORTS kernelDecompInfo
     Point anchor;
     //! Number of times erosion and dilation are applied.
     int iterations;
-}
+};
 
 /**
  * @brief Decompose the structuring element.
