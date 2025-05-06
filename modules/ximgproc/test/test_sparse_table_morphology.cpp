@@ -57,7 +57,8 @@ Mat knRnd(int size, int density)
 */
 void dilate_rgr(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT,
+    const Scalar& bdrVal = morphologyDefaultBorderValue())
 {
     Mat expected, actual;
     dilate(src, expected, kernel, anchor, iterations, bdrType, bdrVal);
@@ -94,7 +95,8 @@ TEST(ximgproc_StMorph_dilate, regression_it2) { dilate_rgr(im(CV_8UC3), kn5(), P
 */
 void dilate_ftr(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT,
+    const Scalar& bdrVal = morphologyDefaultBorderValue())
 {
     Mat expected, actual;
     stMorph::dilate(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
@@ -112,7 +114,8 @@ TEST(ximgproc_StMorph_dilate, feature_32SC3) { dilate_ftr(im(CV_32SC3), kn5()); 
 */
 void erode_rgr(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT,
+    const Scalar& bdrVal = morphologyDefaultBorderValue())
 {
     Mat expected, actual;
     erode(src, expected, kernel, anchor, iterations, bdrType, bdrVal);
@@ -149,7 +152,8 @@ TEST(ximgproc_StMorph_erode, regression_it2) { erode_rgr(im(CV_8UC3), kn5(), Poi
 */
 void erode_ftr(InputArray src, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT,
+    const Scalar& bdrVal = morphologyDefaultBorderValue())
 {
     Mat expected, actual;
     stMorph::erode(src, actual, kernel, anchor, iterations, bdrType, bdrVal);
@@ -167,7 +171,8 @@ TEST(ximgproc_StMorph_erode, feature_32SC3) { erode_ftr(im(CV_32SC3), kn5()); }
 */
 void ex_rgr(InputArray src, MorphTypes op, InputArray kernel, Point anchor = Point(-1, -1),
     int iterations = 1,
-    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT, Scalar& bdrVal = Scalar::all(DBL_MAX))
+    BorderTypes bdrType = BorderTypes::BORDER_CONSTANT,
+    const Scalar& bdrVal = morphologyDefaultBorderValue())
 {
     Mat expected, actual;
     morphologyEx(src, expected, op, kernel, anchor, iterations, bdrType, bdrVal);
