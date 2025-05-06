@@ -21,8 +21,8 @@ PERF_TEST_P(SparseTableMorphologyPerfTest, perf,
     MorphTypes_MorphShapes_t params = GetParam();
     int seSize = 51;
     Size sz = sz1080p;
-    MorphTypes op = std::tr1::get<0>(params);
-    MorphShapes knType = std::tr1::get<1>(params);
+    MorphTypes op = std::get<0>(params);
+    MorphShapes knType = std::get<1>(params);
 
     Mat src(sz, CV_8UC3), dst(sz, CV_8UC3);
     Mat kernel = getStructuringElement(knType, cv::Size(2 * seSize + 1, 2 * seSize + 1));
@@ -31,7 +31,7 @@ PERF_TEST_P(SparseTableMorphologyPerfTest, perf,
 
     TEST_CYCLE_N(5)
     {
-        cv::stMorph::morphologyEx(src, dst, op, kernel);
+        cv::ximgproc::stMorph::morphologyEx(src, dst, op, kernel);
     }
 
     SANITY_CHECK_NOTHING();
