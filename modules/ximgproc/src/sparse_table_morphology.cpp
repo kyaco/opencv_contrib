@@ -22,7 +22,7 @@ static inline Point normalizeAnchor(Point anchor, Size ksize)
     return anchor;
 }
 
-int log2(int n)
+static int log2(int n)
 {
     int ans = -1;
     while (n > 0)
@@ -33,7 +33,7 @@ int log2(int n)
     return ans;
 }
 
-int longestRowRunLength(const Mat& kernel)
+static int longestRowRunLength(const Mat& kernel)
 {
     int cnt = 0;
     int maxLen = 0;
@@ -54,7 +54,7 @@ int longestRowRunLength(const Mat& kernel)
     return maxLen;
 }
 
-int longestColRunLength(const Mat& kernel)
+static int longestColRunLength(const Mat& kernel)
 {
     int cnt = 0;
     int maxLen = 0;
@@ -75,7 +75,7 @@ int longestColRunLength(const Mat& kernel)
     return maxLen;
 }
 
-std::vector<Point> findP2RectCorners(const Mat& stNode, int rowDepth, int colDepth)
+static std::vector<Point> findP2RectCorners(const Mat& stNode, int rowDepth, int colDepth)
 {
     int rowOfst = 1 << rowDepth;
     int colOfst = 1 << colDepth;
@@ -109,7 +109,7 @@ std::vector<Point> findP2RectCorners(const Mat& stNode, int rowDepth, int colDep
 * Find a set of power-2-rectangles to cover the kernel.
 * power-2-rectangles is a rectangle whose height and width are both power of 2.
 */
-std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
+static std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
     const Mat& kernel, int rowDepthLim, int colDepthLim)
 {
     CV_Assert(kernel.type() == CV_8UC1);
@@ -142,7 +142,7 @@ std::vector<std::vector<std::vector<Point>>> genPow2RectsToCoverKernel(
 /*
 * Solves the rectilinear steiner arborescence problem greedy.
 */
-Mat SolveRSAPGreedy(const Mat& initialMap)
+static Mat SolveRSAPGreedy(const Mat& initialMap)
 {
     CV_Assert(initialMap.type() == CV_8UC1);
     std::vector<Point> pos;
@@ -191,7 +191,7 @@ Mat SolveRSAPGreedy(const Mat& initialMap)
     return resMap;
 }
 
-Mat sparseTableFillPlanning(
+static Mat sparseTableFillPlanning(
     std::vector<std::vector<std::vector<Point>>> pow2Rects, int rowDepthLim, int colDepthLim)
 {
     // list up required sparse table nodes.
@@ -239,7 +239,7 @@ enum Op
     Min, Max
 };
 
-void morphDfs(int minmax, Mat& st, Mat& dst,
+static void morphDfs(int minmax, Mat& st, Mat& dst,
     std::vector<std::vector<std::vector<Point>>> row2Rects, const Mat& stPlan,
     int rowDepth, int colDepth)
 {
@@ -276,7 +276,7 @@ void morphDfs(int minmax, Mat& st, Mat& dst,
 }
 
 template <typename T>
-void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
+static void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
     BorderTypes borderType, const Scalar& borderVal)
 {
     T nil = (minmax == Op::Min) ? std::numeric_limits<T>::max() : std::numeric_limits<T>::min();
@@ -302,7 +302,7 @@ void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
     } while (--kdi.iterations > 0);
 }
 
-void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
+static void morphOp(Op minmax, InputArray _src, OutputArray _dst, kernelDecompInfo kdi,
     BorderTypes borderType, const Scalar& borderVal)
 {
     if (kdi.iterations == 0 || kdi.rows * kdi.cols == 1)
