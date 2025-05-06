@@ -11,8 +11,8 @@ namespace {
 
 void assertArraysIdentical(InputArray ary1, InputArray ary2)
 {
-    Mat xor = ary1.getMat() ^ ary2.getMat();
-    CV_Assert(cv::countNonZero(xor.reshape(1)) == 0);
+    Mat xormat = ary1.getMat() ^ ary2.getMat();
+    CV_Assert(cv::countNonZero(xormat.reshape(1)) == 0);
 }
 Mat im(int type)
 {
